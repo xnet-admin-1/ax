@@ -565,6 +565,7 @@ func (m *model) handleHandoffFromTool(result string)                       {}
 // Run starts the TUI with the given engine backend.
 func Run(eng *engine.Engine) error {
 	backend := engine.NewLocal(eng.DB, eng.Gateway)
+	backend.AgentMgr = agent.NewManager(eng.DB, eng.Gateway)
 	m := NewLocalWithOpts(backend, LaunchOpts{})
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
