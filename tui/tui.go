@@ -130,6 +130,7 @@ type model struct {
 	spawnAgentName string
 	spawnTaskInput bool
 	spawnTaskBuf      string
+	spawnReportToAgent bool
 	spawnReportToChat bool
 	agentBuilderList list.Model
 	agentBuildStep    int
