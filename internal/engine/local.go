@@ -240,6 +240,19 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			}
 			if l.AgentMgr != nil {
 				toolCtx.SpawnAgent = l.AgentMgr.Spawn
+				toolCtx.GetAgentResult = func(taskID string) (string, error) {
+					for i := 0; i < 120; i++ {
+						t := l.AgentMgr.GetTask(taskID)
+						if t == nil {
+							return "", fmt.Errorf("task %s not found", taskID)
+						}
+						if t.Status == "done" || t.Status == "error" {
+							return t.Result, nil
+						}
+						time.Sleep(time.Second)
+					}
+					return "", fmt.Errorf("timeout waiting for task %s", taskID)
+				}
 			}
 			result, err := llm.ExecuteTool(tc.Function.Name, args, toolCtx)
 			if err != nil {
@@ -506,7 +519,7 @@ Rules:
 - To list directory: call list_dir
 - To delegate work: call spawn_agent with agent name (architect, coder, researcher, qa, security, devops, writer)
 
-For complex tasks, break them into parallel sub-tasks using spawn_agent with specialized agents.
+For complex tasks, break them into parallel sub-tasks using spawn_agent with specialized agents. ALWAYS call get_agent_result after spawning to retrieve and present the result.
 
 DO NOT output JSON tool calls as text. Use the function calling mechanism.
 DO NOT describe what you would do — actually DO it.

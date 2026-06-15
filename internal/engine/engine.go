@@ -152,6 +152,20 @@ var toolDefs = []map[string]any{
 			},
 		},
 	},
+	{
+		"type": "function",
+		"function": map[string]any{
+			"name":        "get_agent_result",
+			"description": "Wait for a spawned agent to complete and return its result. Blocks until done (max 120s).",
+			"parameters": map[string]any{
+				"type":     "object",
+				"required": []string{"task_id"},
+				"properties": map[string]any{
+					"task_id": map[string]string{"type": "string", "description": "Task ID returned by spawn_agent"},
+				},
+			},
+		},
+	},
 }
 
 func (e *Engine) SelectedModel() string {

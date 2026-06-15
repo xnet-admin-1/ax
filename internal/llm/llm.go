@@ -55,6 +55,7 @@ type ToolContext struct {
 	ConfirmDangerous  func(string, string) bool
 	SearchProviderURL string
 	SpawnAgent        func(agentName, task string) (string, error)
+	GetAgentResult    func(taskID string) (string, error)
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -226,6 +227,12 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 			return "", err
 		}
 		return truncate(string(body), ctx.FetchLimit), nil
+	case "get_agent_result":
+		taskID := str(args, "task_id")
+		if ctx.GetAgentResult != nil {
+			return ctx.GetAgentResult(taskID)
+		}
+		return "get_agent_result not available", nil
 	case "spawn_agent":
 		agentName := str(args, "agent")
 		if agentName == "" {
