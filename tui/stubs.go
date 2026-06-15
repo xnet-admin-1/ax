@@ -326,19 +326,47 @@ func (m *model) agentsTreeView() string {
 	if mgr == nil {
 		return "Agents Monitor  esc=close\n\n  (no agent manager)"
 	}
+	// Detail view for specific task
+	if m.agentLogID != "" {
+		t := mgr.GetTask(m.agentLogID)
+		if t == nil {
+			m.agentLogID = ""
+		} else {
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("[%s] %s  esc=back\n\n", t.Agent, t.Status))
+			b.WriteString(fmt.Sprintf("  ID: %s\n", t.ID[:12]))
+			b.WriteString(fmt.Sprintf("  Elapsed: %s\n\n", time.Since(t.StartedAt).Truncate(time.Second)))
+			if t.Result != "" {
+				b.WriteString("  Result:\n  " + strings.ReplaceAll(t.Result, "\n", "\n  ") + "\n")
+			}
+			return b.String()
+		}
+	}
 	tasks := mgr.ListTasks()
 	if len(tasks) == 0 {
-		return "Agents Monitor  esc=close\n\n  (no active tasks)"
+		return "Agents Monitor  enter=view  k=kill  esc=close\n\n  (no active tasks)"
 	}
 	var b strings.Builder
-	b.WriteString("Agents Monitor  esc=close\n\n")
-	for _, t := range tasks {
-		elapsed := time.Since(t.StartedAt).Truncate(time.Second)
-		result := t.Result
-		if len(result) > 50 {
-			result = result[:50] + "..."
+	b.WriteString("Agents Monitor  enter=view  k=kill  r=refresh  esc=close\n\n")
+	for i, t := range tasks {
+		prefix := "  |-- "
+		if i == len(tasks)-1 {
+			prefix = "  +-- "
 		}
-		fmt.Fprintf(&b, "  [%s] %s (%s) %s\n    %s\n", t.Status, t.Agent, t.ID[:8], elapsed, result)
+		desc := t.Agent
+		if t.Result != "" {
+			r := t.Result
+			if len(r) > 40 {
+				r = r[:40] + "..."
+			}
+			desc += ": " + r
+		}
+		elapsed := time.Since(t.StartedAt).Truncate(time.Second).String()
+		cursor := " "
+		if i == m.agentsIdx {
+			cursor = ">"
+		}
+		b.WriteString(fmt.Sprintf("%s%s[%s] %s (%s)\n", cursor, prefix, t.Status, desc, elapsed))
 	}
 	return b.String()
 }
