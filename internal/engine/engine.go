@@ -43,6 +43,7 @@ type Event struct {
 type Message struct {
 	Role       string     `json:"role"`
 	Content    string     `json:"content"`
+	Name       string     `json:"name,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
@@ -132,6 +133,21 @@ var toolDefs = []map[string]any{
 				"required": []string{"query"},
 				"properties": map[string]any{
 					"query": map[string]string{"type": "string", "description": "Search query"},
+				},
+			},
+		},
+	},
+	{
+		"type": "function",
+		"function": map[string]any{
+			"name":        "spawn_agent",
+			"description": "Spawn a background agent to work on a task autonomously. Returns task ID.",
+			"parameters": map[string]any{
+				"type":     "object",
+				"required": []string{"task"},
+				"properties": map[string]any{
+					"agent": map[string]string{"type": "string", "description": "Agent name from roster (or 'default')"},
+					"task":  map[string]string{"type": "string", "description": "Task description for the agent"},
 				},
 			},
 		},

@@ -243,7 +243,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 				result = "error: " + err.Error()
 			}
 			ch <- Event{Type: "tool_result", ToolName: tc.Function.Name, ToolResult: result}
-			messages = append(messages, Message{Role: "tool", Content: result, ToolCallID: tc.ID})
+			messages = append(messages, Message{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", result, tc.ID, time.Now().Unix())
 		}
 	}
@@ -273,6 +273,9 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 		}
 		if m.ToolCallID != "" {
 			msg["tool_call_id"] = m.ToolCallID
+			if m.Name != "" {
+				msg["name"] = m.Name
+			}
 		}
 		bodyMsgs = append(bodyMsgs, msg)
 	}
