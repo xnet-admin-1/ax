@@ -213,7 +213,10 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 		return b.String(), nil
 	case "search_web":
 		u := ctx.SearchProviderURL + "/search?q=" + url.QueryEscape(str(args, "query")) + "&format=json"
-		resp, err := http.Get(u)
+		req, _ := http.NewRequest("GET", u, nil)
+		req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; AX/1.0)")
+		req.Header.Set("Accept", "application/json")
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return "", err
 		}
