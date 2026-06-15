@@ -404,6 +404,6 @@ func (l *Local) maybeAutoTitle(convID, apiBase, apiKey, model string, ch chan Ev
 			return
 		}
 		l.DB.Exec("UPDATE conversations SET title=? WHERE id=?", title, convID)
-		ch <- Event{Type: "title", Delta: title}
+		
 	}()
 }
