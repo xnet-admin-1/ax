@@ -23,13 +23,39 @@ type Agent struct {
 	Tools        []string `json:"tools"`
 }
 
+type TaskEvent struct {
+	Type   string // delta, tool_call, tool_result, progress, done, error
+	Text   string
+}
+
 type Task struct {
 	ID        string
 	Agent     string
 	Status    string // running, done, error
 	Result    string
 	StartedAt time.Time
+	Log       []TaskEvent
+	Events    chan TaskEvent
 	cancel    context.CancelFunc
+	mu        sync.Mutex
+}
+
+func (t *Task) emit(ev TaskEvent) {
+	t.mu.Lock()
+	t.Log = append(t.Log, ev)
+	t.mu.Unlock()
+	select {
+	case t.Events <- ev:
+	default:
+	}
+}
+
+func (t *Task) GetLog() []TaskEvent {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	cp := make([]TaskEvent, len(t.Log))
+	copy(cp, t.Log)
+	return cp
 }
 
 type Manager struct {
@@ -200,7 +226,7 @@ func (m *Manager) Spawn(agentName, task string) (string, error) {
 
 	id := newID()
 	ctx, cancel := context.WithCancel(context.Background())
-	t := &Task{ID: id, Agent: agentName, Status: "running", StartedAt: time.Now(), cancel: cancel}
+	t := &Task{ID: id, Agent: agentName, Status: "running", StartedAt: time.Now(), Events: make(chan TaskEvent, 64), cancel: cancel}
 	m.mu.Lock()
 	m.tasks[id] = t
 	m.mu.Unlock()
@@ -265,12 +291,17 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 		json.NewDecoder(resp.Body).Decode(&res); resp.Body.Close()
 		if len(res.Choices) == 0 { m.finish(t, "", fmt.Errorf("empty response")); return }
 		msg := res.Choices[0].Message
+		if msg.Content != "" {
+			t.emit(TaskEvent{Type: "delta", Text: msg.Content})
+		}
 		if len(msg.ToolCalls) == 0 { m.finish(t, msg.Content, nil); return }
 		messages = append(messages, chatMsg{Role: "assistant", Content: msg.Content, ToolCalls: msg.ToolCalls})
 		for _, tc := range msg.ToolCalls {
+			t.emit(TaskEvent{Type: "tool_call", Text: tc.Function.Name + "(" + tc.Function.Arguments + ")"})
 			var args map[string]any
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
 			result := executeAgentTool(tc.Function.Name, args)
+			t.emit(TaskEvent{Type: "tool_result", Text: result})
 			messages = append(messages, chatMsg{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
 		}
 	}
@@ -279,7 +310,6 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 
 func (m *Manager) finish(t *Task, result string, err error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if err != nil {
 		t.Status = "error"
 		t.Result = err.Error()
@@ -287,6 +317,9 @@ func (m *Manager) finish(t *Task, result string, err error) {
 		t.Status = "done"
 		t.Result = result
 	}
+	m.mu.Unlock()
+	t.emit(TaskEvent{Type: "done", Text: t.Result})
+	close(t.Events)
 }
 
 func (m *Manager) GetTask(id string) *Task {
