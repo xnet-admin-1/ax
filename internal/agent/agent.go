@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/xnet-admin-1/ax/internal/gateway"
+	"github.com/xnet-admin-1/ax/internal/llm"
 )
 
 type Agent struct {
@@ -213,75 +214,43 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 		{Role: "system", Content: ag.SystemPrompt},
 		{Role: "user", Content: task},
 	}
-	body := map[string]any{"model": model, "messages": messages, "stream": true}
-	jsonBody, _ := json.Marshal(body)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
-	if err != nil {
-		m.finish(t, "", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-
-	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
-	if err != nil {
-		m.finish(t, "", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		m.finish(t, "", fmt.Errorf("API %d: %s", resp.StatusCode, b))
-		return
-	}
-
-	var content strings.Builder
-	buf := make([]byte, 8192)
-	var remainder string
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			remainder += string(buf[:n])
-			lines := strings.Split(remainder, "\n")
-			remainder = lines[len(lines)-1]
-			for _, line := range lines[:len(lines)-1] {
-				line = strings.TrimSpace(line)
-				if !strings.HasPrefix(line, "data: ") {
-					continue
-				}
-				data := line[6:]
-				if data == "[DONE]" {
-					goto done
-				}
-				var chunk struct {
-					Choices []struct {
-						Delta struct {
-							Content string `json:"content"`
-						} `json:"delta"`
-					} `json:"choices"`
-				}
-				if json.Unmarshal([]byte(data), &chunk) != nil {
-					continue
-				}
-				if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-					content.WriteString(chunk.Choices[0].Delta.Content)
-				}
-			}
+	for turn := 0; turn < 20; turn++ {
+		body := map[string]any{"model": model, "messages": messages, "tools": agentToolDefs}
+		jsonBody, _ := json.Marshal(body)
+		req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
+		if err != nil { m.finish(t, "", err); return }
+		req.Header.Set("Content-Type", "application/json")
+		if apiKey != "" { req.Header.Set("Authorization", "Bearer "+apiKey) }
+		resp, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
+		if err != nil { m.finish(t, "", err); return }
+		if resp.StatusCode != 200 {
+			b, _ := io.ReadAll(resp.Body); resp.Body.Close()
+			m.finish(t, "", fmt.Errorf("API %d: %s", resp.StatusCode, b)); return
 		}
-		if readErr == io.EOF {
-			break
+		var res struct {
+			Choices []struct {
+				Message struct {
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						ID string `json:"id"`
+						Function struct { Name, Arguments string } `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"message"`
+			} `json:"choices"`
 		}
-		if readErr != nil {
-			m.finish(t, content.String(), readErr)
-			return
+		json.NewDecoder(resp.Body).Decode(&res); resp.Body.Close()
+		if len(res.Choices) == 0 { m.finish(t, "", fmt.Errorf("empty response")); return }
+		msg := res.Choices[0].Message
+		if len(msg.ToolCalls) == 0 { m.finish(t, msg.Content, nil); return }
+		messages = append(messages, chatMsg{Role: "assistant", Content: msg.Content, ToolCalls: msg.ToolCalls})
+		for _, tc := range msg.ToolCalls {
+			var args map[string]any
+			json.Unmarshal([]byte(tc.Function.Arguments), &args)
+			result := executeAgentTool(tc.Function.Name, args)
+			messages = append(messages, chatMsg{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
 		}
 	}
-done:
-	m.finish(t, content.String(), nil)
+	m.finish(t, "max turns reached", nil)
 }
 
 func (m *Manager) finish(t *Task, result string, err error) {
@@ -323,12 +292,32 @@ func (m *Manager) Cancel(id string) {
 }
 
 type chatMsg struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string `json:"role"`
+	Content    string `json:"content"`
+	Name       string `json:"name,omitempty"`
+	ToolCalls  any    `json:"tool_calls,omitempty"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
 func newID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
+}
+
+var agentToolDefs = []map[string]any{
+	{"type": "function", "function": map[string]any{"name": "run_sh", "description": "Execute bash command", "parameters": map[string]any{"type": "object", "required": []string{"command"}, "properties": map[string]any{"command": map[string]string{"type": "string", "description": "Command"}}}}},
+	{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read file", "parameters": map[string]any{"type": "object", "required": []string{"path"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Path"}}}}},
+	{"type": "function", "function": map[string]any{"name": "write_file", "description": "Write file", "parameters": map[string]any{"type": "object", "required": []string{"path", "content"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Path"}, "content": map[string]string{"type": "string", "description": "Content"}}}}},
+	{"type": "function", "function": map[string]any{"name": "list_dir", "description": "List directory", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Path"}}}}},
+	{"type": "function", "function": map[string]any{"name": "search_web", "description": "Search the web", "parameters": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string", "description": "Query"}}}}},
+}
+
+func executeAgentTool(name string, args map[string]any) string {
+	ctx := &llm.ToolContext{ShellOutputLimit: 8000, FileReadLimit: 32000, FetchLimit: 8000, TrustAll: true, SearchProviderURL: "https://search.xnet.ngo"}
+	result, err := llm.ExecuteTool(name, args, ctx)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	return result
 }
