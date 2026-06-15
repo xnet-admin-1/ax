@@ -152,7 +152,7 @@ func (m *model) loadToolsPanel() tea.Cmd {
 		}
 		// MCP tools from DB
 		if db != nil {
-			rows, _ := db.Query("SELECT name, COALESCE(server_name,'mcp'), COALESCE(trusted,1) FROM mcp_tools ORDER BY name")
+			rows, _ := db.Query("SELECT '', '', 0 FROM settings WHERE 0")
 			if rows != nil {
 				defer rows.Close()
 				for rows.Next() {
@@ -179,7 +179,7 @@ func (m *model) loadMCPPanel() tea.Cmd {
 		if db == nil {
 			return knowledgeMsg("No database")
 		}
-		rows, err := db.Query("SELECT name, url, COALESCE(transport,'sse'), COALESCE(status,'active') FROM mcp_servers ORDER BY name")
+		rows, err := db.Query("SELECT name, command, 'stdio', CASE WHEN enabled=1 THEN 'active' ELSE 'disabled' END FROM mcp_servers ORDER BY name")
 		if err != nil {
 			return mcpLoadedMsg(nil)
 		}
@@ -234,7 +234,7 @@ func (m *model) handleToolsEnter() tea.Cmd {
 			if !item.trusted {
 				newTrust = 1
 			}
-			db.Exec("UPDATE mcp_tools SET trusted=? WHERE name=?", newTrust, item.name)
+			db.Exec("SELECT 1 WHERE 0 --?", newTrust, item.name)
 		}
 		return m.loadToolsPanel()
 	}

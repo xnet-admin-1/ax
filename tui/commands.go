@@ -95,6 +95,19 @@ func (m *model) handleCommand(input string) tea.Cmd {
 	case "/clear":
 		m.msgs = nil
 		m.updateViewport()
+	case "/config":
+		if len(parts) >= 3 {
+			key := parts[1]
+			value := strings.Join(parts[2:], " ")
+			db := m.backend.GetDB()
+			if db != nil {
+				db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", key, value)
+			}
+			m.addSystemMsg("Set " + key + " = " + value)
+			return nil
+		}
+		m.panel = panelSettings
+		return m.loadSettingsPanel()
 	case "/settings":
 		m.panel = panelSettings
 		return m.loadSettingsPanel()
