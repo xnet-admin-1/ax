@@ -215,7 +215,10 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 		{Role: "user", Content: task},
 	}
 	for turn := 0; turn < 20; turn++ {
-		body := map[string]any{"model": model, "messages": messages, "tools": agentToolDefs}
+		body := map[string]any{"model": model, "messages": messages}
+		if turn == 0 || len(messages) > 2 {
+			body["tools"] = agentToolDefs
+		}
 		jsonBody, _ := json.Marshal(body)
 		req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
 		if err != nil { m.finish(t, "", err); return }
@@ -225,6 +228,22 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 		if err != nil { m.finish(t, "", err); return }
 		if resp.StatusCode != 200 {
 			b, _ := io.ReadAll(resp.Body); resp.Body.Close()
+			if resp.StatusCode == 400 && turn == 0 {
+				// Retry without tools
+				body2 := map[string]any{"model": model, "messages": messages}
+				jsonBody2, _ := json.Marshal(body2)
+				req2, _ := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody2)))
+				req2.Header.Set("Content-Type", "application/json")
+				if apiKey != "" { req2.Header.Set("Authorization", "Bearer "+apiKey) }
+				resp2, err2 := (&http.Client{Timeout: 5 * time.Minute}).Do(req2)
+				if err2 != nil { m.finish(t, "", err2); return }
+				if resp2.StatusCode == 200 {
+					var res2 struct { Choices []struct { Message struct { Content string } } }
+					json.NewDecoder(resp2.Body).Decode(&res2); resp2.Body.Close()
+					if len(res2.Choices) > 0 { m.finish(t, res2.Choices[0].Message.Content, nil); return }
+				}
+				resp2.Body.Close()
+			}
 			m.finish(t, "", fmt.Errorf("API %d: %s", resp.StatusCode, b)); return
 		}
 		var res struct {
