@@ -15,7 +15,7 @@ var slashCommands = []string{
 	// Agents
 	"/spawn", "/agent", "/monitor",
 	// Tools/Config
-	"/tools", "/mcp", "/config", "/settings",
+	"/tools", "/mcp", "/settings",
 	// Data
 	"/memory", "/knowledge", "/vectors",
 	// Infrastructure

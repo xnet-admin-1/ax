@@ -17,10 +17,15 @@ import (
 )
 
 type Agent struct {
-	Name         string   `json:"name"`
-	SystemPrompt string   `json:"systemPrompt"`
-	Model        string   `json:"model"`
-	Tools        []string `json:"tools"`
+	Name          string   `json:"name"`
+	SystemPrompt  string   `json:"systemPrompt"`
+	Model         string   `json:"model"`
+	Tools         []string `json:"tools"`
+	MaxTokens     int      `json:"maxTokens,omitempty"`
+	ContextTokens int      `json:"contextTokens,omitempty"`
+	Temperature   float64  `json:"temperature,omitempty"`
+	TopP          float64  `json:"topP,omitempty"`
+	TopK          int      `json:"topK,omitempty"`
 }
 
 type TaskEvent struct {

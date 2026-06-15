@@ -96,13 +96,12 @@ func (m *model) handleCommand(input string) tea.Cmd {
 		m.msgs = nil
 		m.updateViewport()
 	case "/config":
+		// config key value sets inline, otherwise opens settings
 		if len(parts) >= 3 {
 			key := parts[1]
 			value := strings.Join(parts[2:], " ")
 			db := m.backend.GetDB()
-			if db != nil {
-				db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", key, value)
-			}
+			if db != nil { db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", key, value) }
 			m.addSystemMsg("Set " + key + " = " + value)
 			return nil
 		}

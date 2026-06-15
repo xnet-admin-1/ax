@@ -843,6 +843,10 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.panel == panelAgentBuilder {
 			return m, m.handleAgentBuilderDelete()
 		}
+	case "e":
+		if m.panel == panelProvider {
+			return m, m.handleProviderEdit()
+		}
 		if m.panel == panelMemory {
 			return m, m.handleMemoryDelete()
 		}
@@ -1275,6 +1279,18 @@ func (m *model) recalcLayout() {
 	if len(m.spawnList.Items()) > 0 { m.spawnList.SetSize(listW, listH) }
 	if len(m.agentBuilderList.Items()) > 0 { m.agentBuilderList.SetSize(listW, listH) }
 	m.updateViewport()
+	// Resize panel lists
+	pw, ph := m.width-4, m.height-8
+	m.modelList.SetSize(pw, ph)
+	m.sessList.SetSize(pw, ph)
+	m.settingsList.SetSize(pw, ph)
+	m.configList.SetSize(pw, ph)
+	m.toolsList2.SetSize(pw, ph)
+	m.providerList.SetSize(pw, ph)
+	m.memoryList.SetSize(pw, ph)
+	m.spawnList.SetSize(pw, ph)
+	m.agentBuilderList.SetSize(pw, ph)
+	m.agentsList.SetSize(pw, ph)
 }
 
 func (m *model) statusBar() string {
