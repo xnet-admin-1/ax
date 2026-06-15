@@ -275,6 +275,8 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 			msg["tool_call_id"] = m.ToolCallID
 			if m.Name != "" {
 				msg["name"] = m.Name
+			} else {
+				msg["name"] = "tool"
 			}
 		}
 		bodyMsgs = append(bodyMsgs, msg)
