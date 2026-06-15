@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/user"
+	"runtime"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -160,6 +162,11 @@ func (e *Engine) Chat(ctx context.Context, messages []Message, onEvent func(Even
 		return err
 	}
 
+	// Prepend system prompt
+	sys := systemPromptText()
+	if sys != "" {
+		messages = append([]Message{{Role: "system", Content: sys}}, messages...)
+	}
 	for {
 		messages = e.maybeCompact(ctx, apiBase, apiKey, upstreamModel, messages)
 
@@ -509,3 +516,21 @@ type ModelConfig struct {
 }
 
 
+
+func systemPromptText() string {
+	hostname, _ := os.Hostname()
+	cwd, _ := os.Getwd()
+	u, _ := user.Current()
+	username := ""
+	if u != nil {
+		username = u.Username
+	}
+	return fmt.Sprintf(`You are AX. Your name is AX. You are a personal intelligent agent running in the user's terminal with direct filesystem, shell, and network access. You are an autonomous agent — not a chatbot.
+
+Environment: %s@%s %s (%s/%s) %s
+
+CRITICAL: Use tools for ANY task involving files, commands, or information. NEVER say "I can't". DO NOT describe what you would do — DO it. If a tool fails, try alternatives.
+
+Response style: concise, direct, no filler. Fenced code blocks for code. Short answers for short questions.`,
+		username, hostname, cwd, runtime.GOOS, runtime.GOARCH, time.Now().Format("2006-01-02 15:04"))
+}
