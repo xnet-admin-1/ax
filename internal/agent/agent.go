@@ -44,7 +44,7 @@ func NewManager(db *sql.DB, gw *gateway.Router) *Manager {
 
 func (m *Manager) GetRoster() []Agent {
 	var raw string
-	err := m.DB.QueryRow("SELECT value FROM settings_kv WHERE key='agent_roster'").Scan(&raw)
+	err := m.DB.QueryRow("SELECT value FROM settings WHERE key='agent_roster'").Scan(&raw)
 	if err != nil || raw == "" {
 		return nil
 	}
@@ -58,7 +58,7 @@ func (m *Manager) SaveRoster(agents []Agent) error {
 	if err != nil {
 		return err
 	}
-	_, err = m.DB.Exec("INSERT INTO settings_kv(key,value) VALUES('agent_roster',?) ON CONFLICT(key) DO UPDATE SET value=?", string(data), string(data))
+	_, err = m.DB.Exec("INSERT INTO settings(key,value) VALUES('agent_roster',?) ON CONFLICT(key) DO UPDATE SET value=?", string(data), string(data))
 	return err
 }
 
@@ -72,13 +72,14 @@ func (m *Manager) Spawn(agentName, task string) (string, error) {
 		}
 	}
 	if ag == nil {
-		return "", fmt.Errorf("agent %q not found in roster", agentName)
+		// Default agent — use current model with generic prompt
+		ag = &Agent{Name: agentName, SystemPrompt: "You are a helpful assistant. Complete the given task."}
 	}
 
 	model := ag.Model
 	if model == "" {
 		var sel string
-		m.DB.QueryRow("SELECT value FROM settings_kv WHERE key='selected_model'").Scan(&sel)
+		m.DB.QueryRow("SELECT value FROM settings WHERE key='selected_model'").Scan(&sel)
 		if sel == "" {
 			m.DB.QueryRow("SELECT value FROM settings WHERE key='selected_model'").Scan(&sel)
 		}
