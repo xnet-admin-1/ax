@@ -1279,18 +1279,19 @@ func (m *model) recalcLayout() {
 	if len(m.spawnList.Items()) > 0 { m.spawnList.SetSize(listW, listH) }
 	if len(m.agentBuilderList.Items()) > 0 { m.agentBuilderList.SetSize(listW, listH) }
 	m.updateViewport()
-	// Resize panel lists
+	// Resize panel lists (only if initialized)
 	pw, ph := m.width-4, m.height-8
-	m.modelList.SetSize(pw, ph)
-	m.sessList.SetSize(pw, ph)
-	m.settingsList.SetSize(pw, ph)
-	m.configList.SetSize(pw, ph)
-	m.toolsList2.SetSize(pw, ph)
-	m.providerList.SetSize(pw, ph)
-	m.memoryList.SetSize(pw, ph)
-	m.spawnList.SetSize(pw, ph)
-	m.agentBuilderList.SetSize(pw, ph)
-	m.agentsList.SetSize(pw, ph)
+	if ph < 3 { ph = 3 }
+	if len(m.modelList.Items()) > 0 { m.modelList.SetSize(pw, ph) }
+	if len(m.sessList.Items()) > 0 { m.sessList.SetSize(pw, ph) }
+	if len(m.settingsList.Items()) > 0 { m.settingsList.SetSize(pw, ph) }
+	if len(m.configList.Items()) > 0 { m.configList.SetSize(pw, ph) }
+	if len(m.toolsList2.Items()) > 0 { m.toolsList2.SetSize(pw, ph) }
+	if len(m.providerList.Items()) > 0 { m.providerList.SetSize(pw, ph) }
+	if len(m.memoryList.Items()) > 0 { m.memoryList.SetSize(pw, ph) }
+	if len(m.spawnList.Items()) > 0 { m.spawnList.SetSize(pw, ph) }
+	if len(m.agentBuilderList.Items()) > 0 { m.agentBuilderList.SetSize(pw, ph) }
+	if len(m.agentsList.Items()) > 0 { m.agentsList.SetSize(pw, ph) }
 }
 
 func (m *model) statusBar() string {
