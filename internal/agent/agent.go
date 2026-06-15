@@ -226,8 +226,12 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 		if apiKey != "" { req.Header.Set("Authorization", "Bearer "+apiKey) }
 		resp, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
 		if err != nil { m.finish(t, "", err); return }
+		if resp.StatusCode >= 500 {
+			resp.Body.Close()
+			time.Sleep(2 * time.Second)
+			continue // retry on server error
+		}
 		if resp.StatusCode != 200 {
-			b, _ := io.ReadAll(resp.Body); resp.Body.Close()
 			if resp.StatusCode == 400 && turn == 0 {
 				// Retry without tools
 				body2 := map[string]any{"model": model, "messages": messages}
