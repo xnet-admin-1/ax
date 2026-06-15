@@ -254,7 +254,13 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 					return "", fmt.Errorf("timeout waiting for task %s", taskID)
 				}
 			}
-			result, err := llm.ExecuteTool(tc.Function.Name, args, toolCtx)
+			var result string
+			var err error
+			if tc.Function.Name == "orchestrate" {
+				result = l.ExecuteOrchestrate(tc.Function.Arguments, ch)
+			} else {
+				result, err = llm.ExecuteTool(tc.Function.Name, args, toolCtx)
+			}
 			if err != nil {
 				result = "error: " + err.Error()
 			}
@@ -519,7 +525,11 @@ Rules:
 - To list directory: call list_dir
 - To delegate work: call spawn_agent with agent name (architect, coder, researcher, qa, security, devops, writer)
 
-For complex tasks, break them into parallel sub-tasks using spawn_agent with specialized agents. ALWAYS call get_agent_result after spawning to retrieve and present the result.
+For complex tasks, use the orchestrate tool to run a multi-agent pipeline:
+- Define stages with agent + prompt + optional depends_on
+- Stages without depends_on run in parallel
+- Dependent stages wait and receive prior results as context
+- Use spawn_agent for single tasks, orchestrate for multi-step pipelines
 
 DO NOT output JSON tool calls as text. Use the function calling mechanism.
 DO NOT describe what you would do — actually DO it.
