@@ -235,6 +235,9 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 					ch <- Event{Type: "progress", ToolName: name, ToolResult: chunk}
 				},
 			}
+			if l.AgentMgr == nil && l.DB != nil && l.Gateway != nil {
+				l.AgentMgr = agent.NewManager(l.DB, l.Gateway)
+			}
 			if l.AgentMgr != nil {
 				toolCtx.SpawnAgent = l.AgentMgr.Spawn
 			}
