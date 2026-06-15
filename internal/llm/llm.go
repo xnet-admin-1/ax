@@ -54,6 +54,7 @@ type ToolContext struct {
 	TrustedCommands   map[string]bool
 	ConfirmDangerous  func(string, string) bool
 	SearchProviderURL string
+	SpawnAgent        func(agentName, task string) (string, error)
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -80,6 +81,11 @@ var BuiltinTools = []ToolDef{
 		"type": "object", "properties": map[string]any{
 			"query": map[string]any{"type": "string", "description": "Search query"},
 		}, "required": []string{"query"}}},
+	{Name: "spawn_agent", Description: "Spawn a background agent to work on a task autonomously. Returns task ID.", Parameters: map[string]any{
+		"type": "object", "properties": map[string]any{
+			"agent": map[string]any{"type": "string", "description": "Agent name from roster (or 'default' for general agent)"},
+			"task":  map[string]any{"type": "string", "description": "Task description for the agent to complete"},
+		}, "required": []string{"task"}}},
 }
 
 func str(args map[string]any, key string) string {
@@ -217,6 +223,20 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 			return "", err
 		}
 		return truncate(string(body), ctx.FetchLimit), nil
+	case "spawn_agent":
+		agentName := str(args, "agent")
+		if agentName == "" {
+			agentName = "default"
+		}
+		task := str(args, "task")
+		if ctx.SpawnAgent != nil {
+			id, err := ctx.SpawnAgent(agentName, task)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Agent spawned: %s (task_id: %s)", agentName, id), nil
+		}
+		return "spawn_agent not available in this context", nil
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
