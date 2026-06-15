@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 var orchestrateTool = map[string]any{
@@ -100,11 +101,7 @@ func (l *Local) RunPipeline(task string, stages []Stage, ch chan Event) string {
 						ch <- Event{Type: "progress", ToolName: "orchestrate", ToolResult: fmt.Sprintf("[%s] completed", st.Name)}
 						return
 					}
-					// Brief sleep
-					select {
-					case <-make(chan struct{}):
-					default:
-					}
+					time.Sleep(time.Second)
 					// 1 second sleep via time import in local.go
 				}
 				mu.Lock()

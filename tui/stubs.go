@@ -333,10 +333,31 @@ func (m *model) agentsTreeView() string {
 		} else {
 			var b strings.Builder
 			b.WriteString(fmt.Sprintf("[%s] %s  esc=back\n\n", t.Agent, t.Status))
-			b.WriteString(fmt.Sprintf("  ID: %s\n", t.ID[:12]))
-			b.WriteString(fmt.Sprintf("  Elapsed: %s\n\n", time.Since(t.StartedAt).Truncate(time.Second)))
-			if t.Result != "" {
-				b.WriteString("  Result:\n  " + strings.ReplaceAll(t.Result, "\n", "\n  ") + "\n")
+			b.WriteString(fmt.Sprintf("  ID: %s  Elapsed: %s\n\n", t.ID[:12], time.Since(t.StartedAt).Truncate(time.Second)))
+			// Show live log
+			log := t.GetLog()
+			for _, ev := range log {
+				switch ev.Type {
+				case "delta":
+					text := ev.Text
+					if len(text) > 200 {
+						text = text[:200] + "..."
+					}
+					b.WriteString("  " + text + "\n")
+				case "tool_call":
+					b.WriteString("  > " + ev.Text + "\n")
+				case "tool_result":
+					text := ev.Text
+					if len(text) > 100 {
+						text = text[:100] + "..."
+					}
+					b.WriteString("  = " + text + "\n\n")
+				case "done":
+					b.WriteString("\n  [done]\n")
+				}
+			}
+			if t.Status == "running" {
+				b.WriteString("\n  ... running ...\n")
 			}
 			return b.String()
 		}
