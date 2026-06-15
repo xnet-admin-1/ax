@@ -73,6 +73,10 @@ func migrate(db *sql.DB) error {
 			updatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 		);
 		INSERT OR IGNORE INTO settings(key, value) VALUES('selected_model', '');
+		INSERT OR IGNORE INTO settings(key, value) VALUES('search_provider_url', 'https://search.xnet.ngo');
+		INSERT OR IGNORE INTO settings(key, value) VALUES('task_model_title', '');
+		INSERT OR IGNORE INTO settings(key, value) VALUES('task_model_summary', '');
+		INSERT OR IGNORE INTO settings(key, value) VALUES('auto_compact_threshold', '75');
 	`)
 	return err
 }

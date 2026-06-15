@@ -87,7 +87,7 @@ func (m *model) loadConfigPanel() tea.Cmd {
 		if db == nil {
 			return knowledgeMsg("No database")
 		}
-		rows, err := db.Query("SELECT key, value FROM settings_kv ORDER BY key")
+		rows, err := db.Query("SELECT key, value FROM settings ORDER BY key")
 		if err != nil {
 			return knowledgeMsg("Error: " + err.Error())
 		}
@@ -116,7 +116,7 @@ func (m *model) loadSettingsPanel() tea.Cmd {
 		if db == nil {
 			return knowledgeMsg("No database")
 		}
-		rows, err := db.Query("SELECT key, value FROM settings_kv WHERE key NOT LIKE 'task_model_%' ORDER BY key")
+		rows, err := db.Query("SELECT key, value FROM settings WHERE key NOT LIKE 'task_model_%' ORDER BY key")
 		if err != nil {
 			return knowledgeMsg("Error: " + err.Error())
 		}
@@ -203,7 +203,7 @@ func (m *model) handleConfigEnter() tea.Cmd {
 		db := m.backend.GetDB()
 		var fullVal string
 		if db != nil {
-			db.QueryRow("SELECT value FROM settings_kv WHERE key=?", item.key).Scan(&fullVal)
+			db.QueryRow("SELECT value FROM settings WHERE key=?", item.key).Scan(&fullVal)
 		}
 		m.editingValue = fullVal
 		m.editingCursor = len(fullVal)
@@ -217,7 +217,7 @@ func (m *model) handleSettingsEnter() tea.Cmd {
 		db := m.backend.GetDB()
 		var fullVal string
 		if db != nil {
-			db.QueryRow("SELECT value FROM settings_kv WHERE key=?", item.key).Scan(&fullVal)
+			db.QueryRow("SELECT value FROM settings WHERE key=?", item.key).Scan(&fullVal)
 		}
 		m.editingValue = fullVal
 		m.editingCursor = len(fullVal)
@@ -251,8 +251,8 @@ func (m *model) handleEditKey(key string) (bool, tea.Cmd) {
 		// Save
 		db := m.backend.GetDB()
 		if db != nil {
-			db.Exec("INSERT INTO settings_kv(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=?",
-				m.editingKey, m.editingValue, m.editingValue)
+			db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)",
+				m.editingKey, m.editingKey, m.editingValue)
 		}
 		m.editingKey = ""
 		// Reload current panel

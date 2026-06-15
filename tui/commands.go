@@ -243,7 +243,7 @@ func (m *model) setConfig(key, value string) tea.Cmd {
 		if db == nil {
 			return nil
 		}
-		db.Exec("INSERT INTO settings_kv(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=?", key, value, value)
+		db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", key, key, value)
 		return knowledgeMsg("" + key + " → " + value)
 	}
 }
