@@ -552,12 +552,23 @@ func (m *model) handleSpawnEnter() tea.Cmd {
 		if mgr == nil {
 			return nil
 		}
-		id, err := mgr.Spawn(name, task)
+		// User spawns default to "user" report, prefix with > to report to agent
+		reportTo := "user"
+		if strings.HasPrefix(task, ">") {
+			reportTo = "agent"
+			task = strings.TrimPrefix(task, ">")
+			task = strings.TrimSpace(task)
+		}
+		id, err := mgr.Spawn(name, task, reportTo)
 		if err != nil {
 			m.addSystemMsg("spawn error: " + err.Error())
 			return nil
 		}
-		m.addSystemMsg("Spawned: " + name + " (" + id[:8] + ")")
+		label := "Spawned: " + name + " (" + id[:8] + ")"
+		if reportTo == "agent" {
+			label += " [reports to agent]"
+		}
+		m.addSystemMsg(label)
 		return m.pollSpawnResults()
 	}
 	// Select agent, prompt for task

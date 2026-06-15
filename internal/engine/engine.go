@@ -141,7 +141,7 @@ var toolDefs = []map[string]any{
 		"type": "function",
 		"function": map[string]any{
 			"name":        "spawn_agent",
-			"description": "Spawn a background agent to work on a task autonomously. Available agents: architect (system design), coder (implementation), researcher (web search + synthesis), qa (testing), security (audit), devops (infrastructure), writer (documentation). Use 'default' for general tasks.",
+			"description": "Spawn a background agent. Results report back to you automatically. Available agents: architect (system design), coder (implementation), researcher (web search + synthesis), qa (testing), security (audit), devops (infrastructure), writer (documentation). Use 'default' for general tasks.",
 			"parameters": map[string]any{
 				"type":     "object",
 				"required": []string{"agent", "task"},
