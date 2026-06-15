@@ -54,7 +54,7 @@ type ToolContext struct {
 	TrustedCommands   map[string]bool
 	ConfirmDangerous  func(string, string) bool
 	SearchProviderURL string
-	SpawnAgent        func(agentName, task string) (string, error)
+	SpawnAgent        func(agentName, task string, reportTo ...string) (string, error)
 	GetAgentResult    func(taskID string) (string, error)
 }
 
@@ -240,7 +240,9 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 		}
 		task := str(args, "task")
 		if ctx.SpawnAgent != nil {
-			id, err := ctx.SpawnAgent(agentName, task)
+			reportTo := str(args, "report_to")
+			if reportTo == "" { reportTo = "user" }
+			id, err := ctx.SpawnAgent(agentName, task, reportTo)
 			if err != nil {
 				return "", err
 			}
