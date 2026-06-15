@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/xnet-admin-1/ax/internal/engine"
-	"github.com/xnet-admin-1/ax/internal/llm"
+	"github.com/xnet-admin-1/ax/internal/agent"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -689,10 +689,12 @@ type agentsLoadedMsg []list.Item
 
 func (m *model) loadAgentsPanel() tea.Cmd {
 	return func() tea.Msg {
-		tasks := llm.ListBackgroundTasks()
+		mgr := m.getAgentManager()
+		var tasks []*agent.Task
+		if mgr != nil { tasks = mgr.ListTasks() }
 		var items []list.Item
 		for _, t := range tasks {
-			desc := t.Progress
+			desc := t.Result
 			if desc == "" && t.Status == "complete" {
 				if len(t.Result) > 50 {
 					desc = t.Result[:50] + "..."
@@ -700,8 +702,8 @@ func (m *model) loadAgentsPanel() tea.Cmd {
 					desc = t.Result
 				}
 			}
-			if desc == "" && t.Error != "" {
-				desc = t.Error
+			if desc == "" && t.Result != "" {
+				desc = t.Result
 			}
 			items = append(items, agentItem{id: t.ID, status: t.Status, desc: desc})
 		}
@@ -714,7 +716,7 @@ func (m *model) loadAgentsPanel() tea.Cmd {
 
 func (m *model) handleAgentCancel() tea.Cmd {
 	if item, ok := m.agentsList.SelectedItem().(agentItem); ok && item.id != "--------" {
-		llm.CancelBackgroundTask(item.id)
+		mgr := m.getAgentManager(); if mgr != nil { mgr.Cancel(item.id) }
 		return m.loadAgentsPanel()
 	}
 	return nil
@@ -940,7 +942,9 @@ func (m *model) checkStatus() tea.Cmd {
 		}
 
 		// Background agents
-		tasks := llm.ListBackgroundTasks()
+		mgr := m.getAgentManager()
+		var tasks []*agent.Task
+		if mgr != nil { tasks = mgr.ListTasks() }
 		running := 0
 		for _, t := range tasks {
 			if t.Status == "running" {
