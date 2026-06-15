@@ -131,12 +131,19 @@ func (m *model) handleProviderDeleteFixed() tea.Cmd {
 func (m *model) spawnPanelView() string {
 	if m.spawnTaskInput {
 		var b strings.Builder
-		b.WriteString("Spawn: " + m.spawnAgentName + "\n\n")
+		b.WriteString("Spawn: " + m.spawnAgentName + "  enter=go  esc=back\n\n")
 		b.WriteString("  Task: " + m.spawnTaskBuf + "|\n\n")
-		b.WriteString("  enter=spawn  esc=cancel")
+		userBox := "(*)"
+		agentBox := "( )"
+		if m.spawnReportToAgent {
+			userBox = "( )"
+			agentBox = "(*)"
+		}
+		b.WriteString(fmt.Sprintf("  Report to:  %s User  %s Primary Agent\n", userBox, agentBox))
+		b.WriteString("              tab=toggle\n")
 		return b.String()
 	}
-	return "Spawn  enter=select  b=builder  esc=close\n\n" + m.spawnList.View()
+	return "Spawn  enter=select  esc=close\n\n" + m.spawnList.View()
 }
 
 func (m *model) getAgentManager() *agent.Manager {
@@ -552,12 +559,10 @@ func (m *model) handleSpawnEnter() tea.Cmd {
 		if mgr == nil {
 			return nil
 		}
-		// User spawns default to "user" report, prefix with > to report to agent
+		// Use the toggle value
 		reportTo := "user"
-		if strings.HasPrefix(task, ">") {
+		if m.spawnReportToAgent {
 			reportTo = "agent"
-			task = strings.TrimPrefix(task, ">")
-			task = strings.TrimSpace(task)
 		}
 		id, err := mgr.Spawn(name, task, reportTo)
 		if err != nil {
@@ -588,6 +593,9 @@ func (m *model) handleSpawnKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return true, m.handleSpawnEnter()
 	case "esc":
 		m.spawnTaskInput = false
+		return true, nil
+	case "tab":
+		m.spawnReportToAgent = !m.spawnReportToAgent
 		return true, nil
 	case "backspace":
 		if len(m.spawnTaskBuf) > 0 {
