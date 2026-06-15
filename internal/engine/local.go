@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/xnet-admin-1/ax/internal/gateway"
+	"github.com/xnet-admin-1/ax/internal/agent"
 	"github.com/xnet-admin-1/ax/internal/llm"
 )
 
@@ -76,6 +77,7 @@ func newID() string {
 type Local struct {
 	DB             *sql.DB
 	Gateway        *gateway.Router
+	AgentMgr       *agent.Manager
 	Provider       interface{}
 	Mode           string
 	TrustAll       bool
@@ -225,12 +227,16 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			var args map[string]any
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
 			toolCtx := &llm.ToolContext{
-				ShellOutputLimit: 8000,
-				FileReadLimit:    32000,
-				TrustAll:         l.TrustAll,
+				ShellOutputLimit:  8000,
+				FileReadLimit:     32000,
+				TrustAll:          l.TrustAll,
+				SearchProviderURL: "https://search.xnet.ngo",
 				OnProgress: func(name, chunk string) {
 					ch <- Event{Type: "progress", ToolName: name, ToolResult: chunk}
 				},
+			}
+			if l.AgentMgr != nil {
+				toolCtx.SpawnAgent = l.AgentMgr.Spawn
 			}
 			result, err := llm.ExecuteTool(tc.Function.Name, args, toolCtx)
 			if err != nil {
