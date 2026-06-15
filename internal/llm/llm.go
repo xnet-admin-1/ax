@@ -241,7 +241,7 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 		task := str(args, "task")
 		if ctx.SpawnAgent != nil {
 			reportTo := str(args, "report_to")
-			if reportTo == "" { reportTo = "user" }
+			if reportTo == "" { reportTo = "agent" }
 			id, err := ctx.SpawnAgent(agentName, task, reportTo)
 			if err != nil {
 				return "", err
