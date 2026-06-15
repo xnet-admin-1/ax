@@ -157,6 +157,11 @@ func (l *Local) GetMessages(convID string) ([]Message, error) {
 				m.ToolCallID = toolID.String
 			}
 		}
+		// Skip messages that cant be reconstructed without tool_calls context
+		if m.Role == "tool" { continue }
+		if m.Role == "assistant" && m.Content == "" {
+			continue
+		}
 		out = append(out, m)
 	}
 	return out, nil
