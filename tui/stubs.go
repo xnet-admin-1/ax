@@ -165,7 +165,7 @@ func (m *model) deliverPendingReports() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	for _, t := range mgr.ListTasks() {
-		if t.Status == "done" || t.Status == "error" {
+		if (t.Status == "done" || t.Status == "error") && !t.Internal {
 			if _, seen := m.reportedTasks[t.ID]; !seen {
 				m.reportedTasks[t.ID] = 1
 				label := "[" + t.Agent + "] done"

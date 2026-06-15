@@ -35,6 +35,7 @@ type Task struct {
 	Result    string
 	StartedAt time.Time
 	ReportTo  string // "user" or "agent"
+	Internal  bool
 	Log       []TaskEvent
 	Events    chan TaskEvent
 	cancel    context.CancelFunc
