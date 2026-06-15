@@ -239,7 +239,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 				l.AgentMgr = agent.NewManager(l.DB, l.Gateway)
 			}
 			if l.AgentMgr != nil {
-				toolCtx.SpawnAgent = l.AgentMgr.Spawn
+				toolCtx.SpawnAgent = func(a, t string, r ...string) (string, error) { return l.AgentMgr.Spawn(a, t, r...) }
 				toolCtx.GetAgentResult = func(taskID string) (string, error) {
 					for i := 0; i < 120; i++ {
 						t := l.AgentMgr.GetTask(taskID)

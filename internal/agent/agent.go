@@ -34,6 +34,7 @@ type Task struct {
 	Status    string // running, done, error
 	Result    string
 	StartedAt time.Time
+	ReportTo  string // "user" or "agent"
 	Log       []TaskEvent
 	Events    chan TaskEvent
 	cancel    context.CancelFunc
@@ -192,7 +193,7 @@ func (m *Manager) SaveRoster(agents []Agent) error {
 	return err
 }
 
-func (m *Manager) Spawn(agentName, task string) (string, error) {
+func (m *Manager) Spawn(agentName, task string, reportTo ...string) (string, error) {
 	roster := m.GetRoster()
 	var ag *Agent
 	for i := range roster {
@@ -226,7 +227,9 @@ func (m *Manager) Spawn(agentName, task string) (string, error) {
 
 	id := newID()
 	ctx, cancel := context.WithCancel(context.Background())
-	t := &Task{ID: id, Agent: agentName, Status: "running", StartedAt: time.Now(), Events: make(chan TaskEvent, 64), cancel: cancel}
+	rt := "user"
+	if len(reportTo) > 0 { rt = reportTo[0] }
+	t := &Task{ID: id, Agent: agentName, Status: "running", StartedAt: time.Now(), Events: make(chan TaskEvent, 64), ReportTo: rt, cancel: cancel}
 	m.mu.Lock()
 	m.tasks[id] = t
 	m.mu.Unlock()

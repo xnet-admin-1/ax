@@ -157,30 +157,38 @@ func (m *model) deliverPendingReports() (tea.Model, tea.Cmd) {
 	if mgr == nil {
 		return m, nil
 	}
-	reported := false
 	for _, t := range mgr.ListTasks() {
 		if t.Status == "done" || t.Status == "error" {
 			if _, seen := m.reportedTasks[t.ID]; !seen {
 				m.reportedTasks[t.ID] = 1
-				reported = true
 				label := "[" + t.Agent + "] done"
 				if t.Status == "error" {
 					label = "[" + t.Agent + "] error"
 				}
 				result := t.Result
-				if len(result) > 300 {
-					result = result[:300] + "..."
+				display := result
+				if len(display) > 200 {
+					display = display[:200] + "..."
 				}
-				m.msgs = append(m.msgs, chatMsg{role: "tool_result", content: label + "\n" + result})
-				m.addSystemMsg(label + " - /monitor to view full result")
+
+				if t.ReportTo == "agent" {
+					// Feed back to main agent as context
+					prompt := fmt.Sprintf("[Agent %s completed]\n\n%s\n\nPresent these findings to the user.", t.Agent, result)
+					m.msgs = append(m.msgs, chatMsg{role: "tool_result", content: label})
+					m.cachedMsgCount = 0
+					if !m.streaming {
+						return m, m.startChat(prompt)
+					}
+				} else {
+					// Report to user directly
+					m.msgs = append(m.msgs, chatMsg{role: "tool_result", content: label + "\n" + display})
+					m.addSystemMsg(label + " - /monitor for full result")
+					m.cachedMsgCount = 0
+					m.updateViewport()
+				}
 			}
 		}
 	}
-	if reported {
-		m.cachedMsgCount = 0
-		m.updateViewport()
-	}
-	// Keep polling if any tasks still running
 	for _, t := range mgr.ListTasks() {
 		if t.Status == "running" {
 			return m, m.pollSpawnResults()
