@@ -851,7 +851,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.panel == panelAgents { if h, c := m.handleAgentsKeyStr("d"); h { return m, c } }
 	case "down":
-		if m.panel == panelAgents { if h, c := m.handleAgentsKeyStr("enter"); h { return m, c } }
+		if m.panel == panelAgents { if h, c := m.handleAgentsKeyStr("down"); h { return m, c } }
 		if m.panel == panelModels {
 			m.modelList, _ = m.modelList.Update(msg)
 			return m, nil
@@ -879,6 +879,27 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	m.ctrlCPressed = false
 	if m.panel != panelNone {
+		// Route unhandled keys to the panel's list for filtering/navigation
+		switch m.panel {
+		case panelModels:
+			m.modelList, _ = m.modelList.Update(msg)
+		case panelSessions:
+			m.sessList, _ = m.sessList.Update(msg)
+		case panelSettings:
+			m.settingsList, _ = m.settingsList.Update(msg)
+		case panelConfig:
+			m.configList, _ = m.configList.Update(msg)
+		case panelProvider:
+			m.providerList, _ = m.providerList.Update(msg)
+		case panelMemory:
+			m.memoryList, _ = m.memoryList.Update(msg)
+		case panelSpawn:
+			m.spawnList, _ = m.spawnList.Update(msg)
+		case panelAgentBuilder:
+			m.agentBuilderList, _ = m.agentBuilderList.Update(msg)
+		case panelAgents:
+			m.agentsList, _ = m.agentsList.Update(msg)
+		}
 		return m, nil
 	}
 	cmd := m.input.Update(msg)
