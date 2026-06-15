@@ -518,26 +518,28 @@ func (m *model) handleAgentsKeyStr(key string) (bool, tea.Cmd) {
 	if mgr == nil {
 		return false, nil
 	}
+	tasks := mgr.ListTasks()
 	switch key {
 	case "up":
-		m.agentsList, _ = m.agentsList.Update(tea.KeyMsg{Type: tea.KeyUp})
+		if m.agentsIdx > 0 {
+			m.agentsIdx--
+		}
 		return true, nil
 	case "down":
-		m.agentsList, _ = m.agentsList.Update(tea.KeyMsg{Type: tea.KeyDown})
+		if m.agentsIdx < len(tasks)-1 {
+			m.agentsIdx++
+		}
 		return true, nil
 	case "k":
-		// Cancel selected task
-		if item, ok := m.agentsList.SelectedItem().(agentItem); ok && item.id != "--------" {
-			mgr.Cancel(item.id)
-			return true, m.loadAgentsPanel()
+		if m.agentsIdx < len(tasks) {
+			mgr.Cancel(tasks[m.agentsIdx].ID)
 		}
 		return true, nil
 	case "r":
-		return true, m.loadAgentsPanel()
+		return true, nil
 	case "enter":
-		// Show task detail
-		if item, ok := m.agentsList.SelectedItem().(agentItem); ok && item.id != "--------" {
-			m.agentLogID = item.id
+		if m.agentsIdx < len(tasks) {
+			m.agentLogID = tasks[m.agentsIdx].ID
 		}
 		return true, nil
 	}
