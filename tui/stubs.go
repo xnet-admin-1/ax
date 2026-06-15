@@ -559,7 +559,15 @@ func (m *model) handleAgentBuilderDelete() tea.Cmd {
 func (m *model) handleRemoteConnect() tea.Cmd                              { return nil }
 func (m *model) handleRemoteHealth() tea.Cmd                               { return nil }
 func (m *model) handleRemoteDeploy() tea.Cmd                               { return nil }
-func (m *model) handleSessionRename() tea.Cmd                              { return nil }
+func (m *model) handleSessionRename() tea.Cmd {
+	if m.sessList.SelectedItem() == nil {
+		return nil
+	}
+	// Use editingKey mechanism to rename
+	m.editingKey = "rename_session"
+	m.editingValue = m.convTitle
+	return nil
+}
 func (m *model) handleHandoffFromTool(result string)                       {}
 
 // Run starts the TUI with the given engine backend.
