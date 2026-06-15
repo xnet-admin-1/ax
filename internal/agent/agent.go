@@ -303,7 +303,7 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 			t.emit(TaskEvent{Type: "tool_call", Text: tc.Function.Name + "(" + tc.Function.Arguments + ")"})
 			var args map[string]any
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
-			result := executeAgentTool(tc.Function.Name, args)
+			result := m.executeAgentTool(tc.Function.Name, args)
 			t.emit(TaskEvent{Type: "tool_result", Text: result})
 			messages = append(messages, chatMsg{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
 		}
@@ -371,10 +371,22 @@ var agentToolDefs = []map[string]any{
 	{"type": "function", "function": map[string]any{"name": "write_file", "description": "Write file", "parameters": map[string]any{"type": "object", "required": []string{"path", "content"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Path"}, "content": map[string]string{"type": "string", "description": "Content"}}}}},
 	{"type": "function", "function": map[string]any{"name": "list_dir", "description": "List directory", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Path"}}}}},
 	{"type": "function", "function": map[string]any{"name": "search_web", "description": "Search the web", "parameters": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string", "description": "Query"}}}}},
+	{"type": "function", "function": map[string]any{"name": "spawn_agent", "description": "Spawn a sub-agent to work on a subtask. Available: architect, coder, researcher, qa, security, devops, writer.", "parameters": map[string]any{"type": "object", "required": []string{"agent", "task"}, "properties": map[string]any{"agent": map[string]string{"type": "string", "description": "Agent name"}, "task": map[string]string{"type": "string", "description": "Task"}}}}},
 }
 
-func executeAgentTool(name string, args map[string]any) string {
+func (m *Manager) executeAgentTool(name string, args map[string]any) string {
 	ctx := &llm.ToolContext{ShellOutputLimit: 8000, FileReadLimit: 32000, FetchLimit: 8000, TrustAll: true, SearchProviderURL: "https://search.xnet.ngo"}
+	ctx.SpawnAgent = func(a, t string, r ...string) (string, error) { return m.Spawn(a, t, r...) }
+	ctx.GetAgentResult = func(taskID string) (string, error) {
+		for i := 0; i < 120; i++ {
+			t := m.GetTask(taskID)
+			if t != nil && (t.Status == "done" || t.Status == "error") {
+				return t.Result, nil
+			}
+			time.Sleep(time.Second)
+		}
+		return "", fmt.Errorf("timeout")
+	}
 	result, err := llm.ExecuteTool(name, args, ctx)
 	if err != nil {
 		return "error: " + err.Error()
