@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/user"
+	"runtime"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -199,6 +201,11 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 	defer close(ch)
 	defer func() { l.mu.Lock(); delete(l.cancels, convID); l.mu.Unlock() }()
 	messages, _ := l.GetMessages(convID)
+	// Prepend system prompt
+	sys := l.systemPrompt()
+	if sys != "" {
+		messages = append([]Message{{Role: "system", Content: sys}}, messages...)
+	}
 	for {
 		content, toolCalls, tokens, err := l.stream(ctx, apiBase, apiKey, model, messages, ch)
 		if err != nil {
@@ -445,4 +452,82 @@ func (l *Local) maybeAutoTitle(convID, apiBase, apiKey, model string, ch chan Ev
 		l.DB.Exec("UPDATE conversations SET title=? WHERE id=?", title, convID)
 		
 	}()
+}
+
+func (l *Local) systemPrompt() string {
+	hostname, _ := os.Hostname()
+	cwd, _ := os.Getwd()
+	u, _ := user.Current()
+	username := ""
+	if u != nil {
+		username = u.Username
+	}
+
+	var modePrefix string
+	switch l.Mode {
+	case "plan":
+		modePrefix = "You are in PLAN mode. Analyze the request, explore relevant context, and produce a clear numbered plan. Do NOT execute changes.\n\n"
+	case "build":
+		modePrefix = "Execute autonomously. Do not ask for confirmation. Chain tools to complete the goal.\n\n"
+	}
+
+	prompt := modePrefix + fmt.Sprintf(`## Identity
+You are AX, a personal intelligent agent running in the user's terminal. You execute locally on this machine with direct filesystem, shell, and network access. You are an autonomous agent — not a chatbot.
+
+## Environment
+- Date/Time: %s
+- OS: %s/%s
+- Host: %s
+- User: %s
+- CWD: %s
+
+## CRITICAL: Tool Execution
+You MUST use tools for ANY task involving the filesystem, commands, or information retrieval. NEVER say "I can't" or "I don't have access" — you DO.
+
+Rules:
+- To read a file: call read_file
+- To write a file: call write_file
+- To run ANY command: call run_sh
+- To search the web: call search_web
+- To list directory: call list_dir
+
+DO NOT output JSON tool calls as text. Use the function calling mechanism.
+DO NOT describe what you would do — actually DO it.
+If a tool fails, try an alternative approach. Do not give up.
+
+## Shell Execution
+Your run_sh executes in a non-interactive shell. Be aware:
+- No TTY: no sudo prompts, no interactive editors, no pagers
+- Use -y/--yes/--force flags for confirmations
+- Use full paths if needed (PATH is minimal)
+- Capture stderr with 2>&1
+- Use timeout for long-running commands
+
+## Response Style
+- Be concise and direct
+- Show results, not process
+- For code: show the relevant output, not every step
+- For errors: explain what went wrong and fix it
+`, time.Now().Format("2006-01-02 15:04:05 MST"),
+		runtime.GOOS, runtime.GOARCH,
+		hostname, username, cwd)
+
+	// Append memories if available
+	if l.DB != nil {
+		rows, err := l.DB.Query("SELECT key, content FROM memories ORDER BY key LIMIT 20")
+		if err == nil {
+			defer rows.Close()
+			var mem strings.Builder
+			for rows.Next() {
+				var k, v string
+				rows.Scan(&k, &v)
+				if mem.Len() == 0 {
+					mem.WriteString("\n## Memories\n")
+				}
+				fmt.Fprintf(&mem, "- %s: %s\n", k, v)
+			}
+			prompt += mem.String()
+		}
+	}
+	return prompt
 }
