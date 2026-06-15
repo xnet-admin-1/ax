@@ -234,7 +234,7 @@ func (m *model) handleToolsEnter() tea.Cmd {
 			if !item.trusted {
 				newTrust = 1
 			}
-			db.Exec("SELECT 1 WHERE 0 --?", newTrust, item.name)
+			db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", "tool_trust_"+item.name, fmt.Sprintf("%d", newTrust))
 		}
 		return m.loadToolsPanel()
 	}

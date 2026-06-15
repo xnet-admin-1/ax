@@ -818,3 +818,15 @@ func (m *model) compactContext() tea.Cmd {
 		return knowledgeMsg("Context compacted via LLM summary")
 	}
 }
+
+func (m *model) handleProviderEdit() tea.Cmd {
+	if item, ok := m.providerList.SelectedItem().(providerItem); ok && item.name != "(empty)" {
+		// Start edit mode - reuse provAdd fields
+		m.provAddLabel = item.name
+		m.provAddKey = ""
+		m.provAddBase = ""
+		m.provAddStep = 1 // key step
+		m.addSystemMsg("Editing " + item.name + " - enter new API key (or leave empty to keep current)")
+	}
+	return nil
+}
