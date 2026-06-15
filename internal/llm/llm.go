@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -56,6 +57,7 @@ type ToolContext struct {
 	SearchProviderURL string
 	SpawnAgent        func(agentName, task string, reportTo ...string) (string, error)
 	GetAgentResult    func(taskID string) (string, error)
+	Orchestrate       func(argsJSON string) string
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -233,6 +235,12 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 			return ctx.GetAgentResult(taskID)
 		}
 		return "get_agent_result not available", nil
+	case "orchestrate":
+		if ctx.Orchestrate != nil {
+			raw, _ := json.Marshal(args)
+			return ctx.Orchestrate(string(raw)), nil
+		}
+		return "orchestrate not available in this context", nil
 	case "spawn_agent":
 		agentName := str(args, "agent")
 		if agentName == "" {

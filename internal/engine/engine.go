@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/xnet-admin-1/ax/internal/gateway"
+	"github.com/xnet-admin-1/ax/internal/llm"
+	"github.com/xnet-admin-1/ax/internal/agent"
 )
 
 const contextLimit = 128000
@@ -211,9 +213,32 @@ func (e *Engine) Chat(ctx context.Context, messages []Message, onEvent func(Even
 
 			for _, tc := range toolCalls {
 				onEvent(Event{Type: "tool_call", Tool: tc.Function.Name, Args: tc.Function.Arguments})
-				result := executeTool(tc.Function.Name, tc.Function.Arguments)
+				var args map[string]any
+				json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				toolCtx := &llm.ToolContext{
+					ShellOutputLimit:  8000,
+					FileReadLimit:     32000,
+					FetchLimit:        8000,
+					TrustAll:          true,
+					SearchProviderURL: "https://search.xnet.ngo",
+				}
+				if e.Gateway != nil && e.DB != nil {
+					mgr := agent.NewManager(e.DB, e.Gateway)
+					toolCtx.SpawnAgent = func(a, t string, r ...string) (string, error) { return mgr.Spawn(a, t, r...) }
+				toolCtx.Orchestrate = func(argsJSON string) string {
+					// CLI orchestrate - create a Local and run
+					local := &Local{DB: e.DB, Gateway: e.Gateway, AgentMgr: agent.NewManager(e.DB, e.Gateway)}
+					dummyCh := make(chan Event, 64)
+					go func() { for range dummyCh {} }()
+					return local.ExecuteOrchestrate(argsJSON, dummyCh)
+				}
+				}
+				result, err := llm.ExecuteTool(tc.Function.Name, args, toolCtx)
+				if err != nil {
+					result = "error: " + err.Error()
+				}
 				onEvent(Event{Type: "tool_result", Tool: tc.Function.Name, Result: result})
-				messages = append(messages, Message{Role: "tool", Content: result, ToolCallID: tc.ID})
+				messages = append(messages, Message{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
 			}
 			continue
 		}
