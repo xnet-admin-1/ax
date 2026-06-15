@@ -9,7 +9,7 @@ import (
 
 var slashCommands = []string{
 	// Chat
-	"/new", "/list", "/fork", "/clear",
+	"/new", "/list", "/fork", "/clear", "/config",
 	// Model/Provider
 	"/model", "/provider",
 	// Agents
