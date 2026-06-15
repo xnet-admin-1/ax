@@ -83,6 +83,9 @@ func (l *Local) RunPipeline(task string, stages []Stage, ch chan Event) string {
 				ch <- Event{Type: "progress", ToolName: "orchestrate", ToolResult: fmt.Sprintf("[%s] started (%s)", st.Name, st.Agent)}
 				
 				id, err := l.AgentMgr.Spawn(st.Agent, prompt)
+				if err == nil {
+					if t := l.AgentMgr.GetTask(id); t != nil { t.Internal = true }
+				}
 				if err != nil {
 					mu.Lock()
 					results[st.Name] = "error: " + err.Error()
