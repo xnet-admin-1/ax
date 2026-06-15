@@ -284,6 +284,7 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 	}
 	var content strings.Builder
 	var toolCalls []ToolCall
+	var inThought bool
 	tcArgs := map[int]*strings.Builder{}
 	var tokens int
 	var remainder string
@@ -320,7 +321,45 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 				}
 				if delta.Content != "" {
 					content.WriteString(delta.Content)
-					ch <- Event{Type: "delta", Delta: delta.Content}
+					// Parse <thought> tags inline - split into reasoning vs content
+					text := delta.Content
+					for text != "" {
+						if !inThought {
+							if idx := strings.Index(text, "<thought>"); idx >= 0 {
+								if idx > 0 {
+									ch <- Event{Type: "delta", Delta: text[:idx]}
+								}
+								inThought = true
+								text = text[idx+9:]
+							} else if idx := strings.Index(text, "<think>"); idx >= 0 {
+								if idx > 0 {
+									ch <- Event{Type: "delta", Delta: text[:idx]}
+								}
+								inThought = true
+								text = text[idx+7:]
+							} else {
+								ch <- Event{Type: "delta", Delta: text}
+								text = ""
+							}
+						} else {
+							closeIdx := strings.Index(text, "</thought>")
+							if closeIdx < 0 {
+								closeIdx = strings.Index(text, "</think>")
+							}
+							if closeIdx >= 0 {
+								closeLen := 10 // len("</thought>")
+								if strings.HasPrefix(text[closeIdx:], "</think>") {
+									closeLen = 8
+								}
+								ch <- Event{Type: "delta", Reasoning: text[:closeIdx]}
+								inThought = false
+								text = text[closeIdx+closeLen:]
+							} else {
+								ch <- Event{Type: "delta", Reasoning: text}
+								text = ""
+							}
+						}
+					}
 				}
 				for _, tc := range delta.ToolCalls {
 					for len(toolCalls) <= tc.Index {
