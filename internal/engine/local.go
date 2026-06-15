@@ -499,7 +499,9 @@ Rules:
 - To run ANY command: call run_sh
 - To search the web: call search_web
 - To list directory: call list_dir
-- To delegate work: call spawn_agent (runs task in background)
+- To delegate work: call spawn_agent with agent name (architect, coder, researcher, qa, security, devops, writer)
+
+For complex tasks, break them into parallel sub-tasks using spawn_agent with specialized agents.
 
 DO NOT output JSON tool calls as text. Use the function calling mechanism.
 DO NOT describe what you would do — actually DO it.

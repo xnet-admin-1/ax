@@ -42,14 +42,30 @@ func NewManager(db *sql.DB, gw *gateway.Router) *Manager {
 	return &Manager{DB: db, Gateway: gw, tasks: make(map[string]*Task)}
 }
 
+var DefaultRoster = []Agent{
+	{Name: "architect", SystemPrompt: "You are a software architect. Analyze requirements, design systems, and produce clear architecture plans with component diagrams and API contracts."},
+	{Name: "coder", SystemPrompt: "You are an expert programmer. Write clean, efficient, well-tested code. Implement features completely without shortcuts."},
+	{Name: "researcher", SystemPrompt: "You are a research assistant. Search the web, read documentation, and synthesize findings into concise summaries with sources."},
+	{Name: "qa", SystemPrompt: "You are a QA tester. Write and run tests, find edge cases, verify correctness, and report bugs clearly."},
+	{Name: "security", SystemPrompt: "You are a security auditor. Review code and infrastructure for vulnerabilities, suggest fixes, follow OWASP guidelines."},
+	{Name: "devops", SystemPrompt: "You are a DevOps engineer. Handle infrastructure, deployment, CI/CD, containers, and cloud operations."},
+	{Name: "writer", SystemPrompt: "You are a technical writer. Produce clear documentation, READMEs, guides, and API docs."},
+}
+
 func (m *Manager) GetRoster() []Agent {
 	var raw string
 	err := m.DB.QueryRow("SELECT value FROM settings WHERE key='agent_roster'").Scan(&raw)
 	if err != nil || raw == "" {
-		return nil
+		// Seed default roster
+		m.SaveRoster(DefaultRoster)
+		return DefaultRoster
 	}
 	var agents []Agent
 	json.Unmarshal([]byte(raw), &agents)
+	if len(agents) == 0 {
+		m.SaveRoster(DefaultRoster)
+		return DefaultRoster
+	}
 	return agents
 }
 
@@ -58,7 +74,7 @@ func (m *Manager) SaveRoster(agents []Agent) error {
 	if err != nil {
 		return err
 	}
-	_, err = m.DB.Exec("INSERT INTO settings(key,value) VALUES('agent_roster',?) ON CONFLICT(key) DO UPDATE SET value=?", string(data), string(data))
+	_, err = m.DB.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES('agent_roster',?)", string(data))
 	return err
 }
 
