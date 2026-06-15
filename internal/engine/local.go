@@ -571,3 +571,10 @@ Your run_sh executes in a non-interactive shell. Be aware:
 	}
 	return prompt
 }
+
+func (l *Local) GetAgentManager() interface{} {
+	if l.AgentMgr == nil && l.DB != nil && l.Gateway != nil {
+		l.AgentMgr = agent.NewManager(l.DB, l.Gateway)
+	}
+	return l.AgentMgr
+}

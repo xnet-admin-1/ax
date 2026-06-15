@@ -140,11 +140,10 @@ func (m *model) spawnPanelView() string {
 }
 
 func (m *model) getAgentManager() *agent.Manager {
-	db := m.backend.GetDB()
-	if db == nil {
-		return nil
+	if mgr, ok := m.backend.GetAgentManager().(*agent.Manager); ok {
+		return mgr
 	}
-	return agent.NewManager(db, gateway.NewRouter(db))
+	return nil
 }
 
 func (m *model) pollSpawnResults() tea.Cmd {

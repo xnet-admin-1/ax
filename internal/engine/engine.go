@@ -538,6 +538,7 @@ type Backend interface {
 	CurrentModel() string
 	GetDB() *sql.DB
 	GetModelConfig() (ModelConfig, bool)
+	GetAgentManager() interface{}
 }
 
 type ModelConfig struct {
