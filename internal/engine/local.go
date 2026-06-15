@@ -148,8 +148,14 @@ func (l *Local) GetMessages(convID string) ([]Message, error) {
 		var m Message
 		var toolID sql.NullString
 		rows.Scan(&m.Role, &m.Content, &toolID)
-		if toolID.Valid {
-			m.ToolCallID = toolID.String
+		if toolID.Valid && toolID.String != "" {
+			parts := strings.SplitN(toolID.String, "|", 2)
+			if len(parts) == 2 {
+				m.Name = parts[0]
+				m.ToolCallID = parts[1]
+			} else {
+				m.ToolCallID = toolID.String
+			}
 		}
 		out = append(out, m)
 	}
@@ -267,7 +273,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			}
 			ch <- Event{Type: "tool_result", ToolName: tc.Function.Name, ToolResult: result}
 			messages = append(messages, Message{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
-			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", result, tc.ID, time.Now().Unix())
+			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", result, tc.Function.Name+"|"+tc.ID, time.Now().Unix())
 		}
 	}
 }
