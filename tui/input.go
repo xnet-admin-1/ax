@@ -19,7 +19,6 @@ var slashCommands = []string{
 	// Data
 	"/memory", "/knowledge", "/vectors",
 	// Infrastructure
-	"/remote", "/status",
 	// Utility
 	"/attach", "/export", "/compact", "/usage",
 	// Mode

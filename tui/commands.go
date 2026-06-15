@@ -120,9 +120,6 @@ func (m *model) handleCommand(input string) tea.Cmd {
 	case "/memory":
 		m.panel = panelMemory
 		return m.loadMemoryPanel()
-	case "/remote":
-		m.panel = panelRemote
-		return m.loadRemotePanel()
 	case "/vectors":
 		m.panel = panelVectors
 		return m.loadVectorsPanel()
