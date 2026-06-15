@@ -157,20 +157,36 @@ func (m *model) deliverPendingReports() (tea.Model, tea.Cmd) {
 	if mgr == nil {
 		return m, nil
 	}
+	reported := false
 	for _, t := range mgr.ListTasks() {
 		if t.Status == "done" || t.Status == "error" {
 			if _, seen := m.reportedTasks[t.ID]; !seen {
 				m.reportedTasks[t.ID] = 1
-				label := "✓ Agent " + t.Agent
+				reported = true
+				label := "[" + t.Agent + "] done"
 				if t.Status == "error" {
-					label = "✗ Agent " + t.Agent
+					label = "[" + t.Agent + "] error"
 				}
-				m.msgs = append(m.msgs, chatMsg{role: "assistant", content: label + ":\n" + t.Result})
-				m.cachedRender = ""
+				result := t.Result
+				if len(result) > 300 {
+					result = result[:300] + "..."
+				}
+				m.msgs = append(m.msgs, chatMsg{role: "tool_result", content: label + "\n" + result})
+				m.addSystemMsg(label + " - /monitor to view full result")
 			}
 		}
 	}
-	return m, m.pollSpawnResults()
+	if reported {
+		m.cachedMsgCount = 0
+		m.updateViewport()
+	}
+	// Keep polling if any tasks still running
+	for _, t := range mgr.ListTasks() {
+		if t.Status == "running" {
+			return m, m.pollSpawnResults()
+		}
+	}
+	return m, nil
 }
 
 func (m *model) loadAgentBuilderPanel() tea.Cmd {

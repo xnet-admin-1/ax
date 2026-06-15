@@ -423,7 +423,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vectorsStats = msg.stats
 		return m, nil
 	case pollAgainMsg:
-		return m, m.pollSpawnResults()
+		return m.deliverPendingReports()
 	case agentDoneMsg:
 		return m.handleAgentDone(msg)
 	case spawnResultMsg:
