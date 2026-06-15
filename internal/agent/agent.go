@@ -232,6 +232,7 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 			continue // retry on server error
 		}
 		if resp.StatusCode != 200 {
+			b, _ := io.ReadAll(resp.Body); resp.Body.Close()
 			if resp.StatusCode == 400 && turn == 0 {
 				// Retry without tools
 				body2 := map[string]any{"model": model, "messages": messages}
