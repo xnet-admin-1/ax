@@ -298,7 +298,12 @@ func (m *Manager) run(ctx context.Context, t *Task, ag *Agent, model, apiBase, a
 			t.emit(TaskEvent{Type: "delta", Text: msg.Content})
 		}
 		if len(msg.ToolCalls) == 0 { m.finish(t, msg.Content, nil); return }
-		messages = append(messages, chatMsg{Role: "assistant", Content: msg.Content, ToolCalls: msg.ToolCalls})
+		// Rebuild tool_calls with type field
+		var tcs []map[string]any
+		for _, tc := range msg.ToolCalls {
+			tcs = append(tcs, map[string]any{"id": tc.ID, "type": "function", "function": map[string]any{"name": tc.Function.Name, "arguments": tc.Function.Arguments}})
+		}
+		messages = append(messages, chatMsg{Role: "assistant", Content: msg.Content, ToolCalls: tcs})
 		for _, tc := range msg.ToolCalls {
 			t.emit(TaskEvent{Type: "tool_call", Text: tc.Function.Name + "(" + tc.Function.Arguments + ")"})
 			var args map[string]any
