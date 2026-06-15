@@ -205,7 +205,7 @@ func (m *model) Init() tea.Cmd {
 	// Load persisted model
 	if db := m.backend.GetDB(); db != nil {
 		var model string
-		if db.QueryRow("SELECT value FROM settings_kv WHERE key='selected_model'").Scan(&model) == nil && model != "" {
+		if db.QueryRow("SELECT value FROM settings WHERE key='selected_model'").Scan(&model) == nil && model != "" {
 			m.backend.SetModel(model)
 		}
 	}
@@ -711,7 +711,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if m.taskEditMode != "" {
 					db := m.backend.GetDB()
 					if db != nil {
-						db.Exec("INSERT INTO settings_kv(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=?", "task_model_"+m.taskEditMode, string(item), string(item))
+						db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", "task_model_"+m.taskEditMode, "task_model_"+m.taskEditMode, string(item))
 					}
 					m.addSystemMsg("" + m.taskEditMode + " → " + string(item))
 					m.taskEditMode = ""
@@ -719,7 +719,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.backend.SetModel(string(item))
 					db := m.backend.GetDB()
 					if db != nil {
-						db.Exec("INSERT INTO settings_kv(key,value) VALUES('selected_model',?) ON CONFLICT(key) DO UPDATE SET value=?", string(item), string(item))
+						db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", "selected_model", string(item))
 					}
 					m.addSystemMsg("Model: " + string(item))
 				}

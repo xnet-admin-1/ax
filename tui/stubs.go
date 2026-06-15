@@ -661,7 +661,7 @@ func (m *model) compactContext() tea.Cmd {
 		summaryModel := m.backend.CurrentModel()
 		if db != nil {
 			var sm string
-			if err := db.QueryRow("SELECT value FROM settings_kv WHERE key='task_model_summary'").Scan(&sm); err == nil && sm != "" {
+			if err := db.QueryRow("SELECT value FROM settings WHERE key='task_model_summary'").Scan(&sm); err == nil && sm != "" {
 				summaryModel = sm
 			}
 		}
