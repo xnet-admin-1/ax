@@ -20,6 +20,7 @@ import (
 
 	"github.com/xnet-admin-1/ax/internal/gateway"
 	"github.com/xnet-admin-1/ax/internal/agent"
+	"github.com/xnet-admin-1/ax/internal/mcp"
 	"github.com/xnet-admin-1/ax/internal/llm"
 )
 
@@ -78,6 +79,7 @@ type Local struct {
 	DB             *sql.DB
 	Gateway        *gateway.Router
 	AgentMgr       *agent.Manager
+	McpMgr         *mcp.Manager
 	Provider       interface{}
 	Mode           string
 	TrustAll       bool
@@ -273,6 +275,9 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 				_, err := l.DB.Exec("DELETE FROM memories WHERE key=?", key)
 				return err
 			}
+			if l.McpMgr != nil {
+				toolCtx.McpExecutor = l.McpMgr.ExecuteTool
+			}
 				toolCtx.GetAgentResult = func(taskID string) (string, error) {
 					for i := 0; i < 120; i++ {
 						t := l.AgentMgr.GetTask(taskID)
@@ -334,7 +339,21 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 		}
 		bodyMsgs = append(bodyMsgs, msg)
 	}
-	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": toolDefs, "stream": true}
+	// Build tools list - builtin + MCP
+	allTools := toolDefs
+	if l.McpMgr != nil {
+		for _, t := range l.McpMgr.GetToolDefs() {
+			allTools = append(allTools, map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name":        t.Name,
+					"description": t.Description,
+					"parameters":  t.InputSchema,
+				},
+			})
+		}
+	}
+	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true}
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
 	if err != nil {
