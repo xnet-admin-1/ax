@@ -233,6 +233,29 @@ func (e *Engine) Chat(ctx context.Context, messages []Message, onEvent func(Even
 					return local.ExecuteOrchestrate(argsJSON, dummyCh)
 				}
 				}
+				if e.DB != nil {
+					toolCtx.SaveMemory = func(key, value string) error {
+						_, err := e.DB.Exec("INSERT OR REPLACE INTO memories(key, content) VALUES(?,?)", key, value)
+						return err
+					}
+					toolCtx.RecallMemory = func(query string) string {
+						rows, err := e.DB.Query("SELECT key, content FROM memories WHERE key LIKE ? OR content LIKE ? LIMIT 10", "%"+query+"%", "%"+query+"%")
+						if err != nil { return "no results" }
+						defer rows.Close()
+						var results []string
+						for rows.Next() {
+							var k, v string
+							rows.Scan(&k, &v)
+							results = append(results, k+": "+v)
+						}
+						if len(results) == 0 { return "no memories found for: "+query }
+						return strings.Join(results, "\n")
+					}
+					toolCtx.DeleteMemory = func(key string) error {
+						_, err := e.DB.Exec("DELETE FROM memories WHERE key=?", key)
+						return err
+					}
+				}
 				result, err := llm.ExecuteTool(tc.Function.Name, args, toolCtx)
 				if err != nil {
 					result = "error: " + err.Error()
@@ -585,7 +608,7 @@ func systemPromptText() string {
 
 Environment: %s@%s %s (%s/%s) %s
 
-CRITICAL: Use tools for ANY task involving files, commands, or information. NEVER say "I can't". DO NOT describe what you would do — DO it. If a tool fails, try alternatives.
+CRITICAL: Use tools for ANY task. Use recall_memory when the user asks about preferences or past info. Use save_memory when they tell you something to remember. involving files, commands, or information. NEVER say "I can't". DO NOT describe what you would do — DO it. If a tool fails, try alternatives.
 
 Response style: concise, direct, no filler. Fenced code blocks for code. Short answers for short questions.`,
 		username, hostname, cwd, runtime.GOOS, runtime.GOARCH, time.Now().Format("2006-01-02 15:04"))

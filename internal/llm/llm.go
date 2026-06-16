@@ -58,6 +58,10 @@ type ToolContext struct {
 	SpawnAgent        func(agentName, task string, reportTo ...string) (string, error)
 	GetAgentResult    func(taskID string) (string, error)
 	Orchestrate       func(argsJSON string) string
+	SaveMemory        func(key, value string) error
+	RecallMemory      func(query string) string
+	DeleteMemory      func(key string) error
+	MemoryDB          interface{ Exec(string, ...any) (interface{}, error); Query(string, ...any) (interface{ Next() bool; Scan(...any) error; Close() error }, error) }
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -235,6 +239,25 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 			return ctx.GetAgentResult(taskID)
 		}
 		return "get_agent_result not available", nil
+	case "save_memory":
+		if ctx.SaveMemory != nil {
+			err := ctx.SaveMemory(str(args, "key"), str(args, "value"))
+			if err != nil { return "", err }
+			return "Saved: " + str(args, "key"), nil
+		}
+		return "memory not available", nil
+	case "recall_memory":
+		if ctx.RecallMemory != nil {
+			return ctx.RecallMemory(str(args, "query")), nil
+		}
+		return "memory not available", nil
+	case "delete_memory":
+		if ctx.DeleteMemory != nil {
+			err := ctx.DeleteMemory(str(args, "key"))
+			if err != nil { return "", err }
+			return "Deleted: " + str(args, "key"), nil
+		}
+		return "memory not available", nil
 	case "orchestrate":
 		if ctx.Orchestrate != nil {
 			raw, _ := json.Marshal(args)
