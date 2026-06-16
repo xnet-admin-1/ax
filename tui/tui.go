@@ -424,6 +424,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vectorsStats = msg.stats
 		return m, nil
 	case pollAgainMsg:
+		if m.panel == panelAgents {
+			m.updateViewport()
+		}
 		return m.deliverPendingReports()
 	case agentDoneMsg:
 		return m.handleAgentDone(msg)
