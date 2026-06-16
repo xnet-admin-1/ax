@@ -363,63 +363,100 @@ func (m *model) agentsTreeView() string {
 			m.agentLogID = ""
 		} else {
 			var b strings.Builder
-			b.WriteString(fmt.Sprintf("[%s] %s  esc=back\n\n", t.Agent, t.Status))
-			b.WriteString(fmt.Sprintf("  ID: %s  Elapsed: %s\n\n", t.ID[:12], time.Since(t.StartedAt).Truncate(time.Second)))
-			// Show live log
+			status := t.Status
+			if status == "running" {
+				status = "running " + getSpinnerFrame(int(time.Since(t.StartedAt).Seconds()))
+			}
+			b.WriteString(fmt.Sprintf("[%s] %s  esc=back  k=kill\n", t.Agent, status))
+			b.WriteString(fmt.Sprintf("  ID: %s  Elapsed: %s\n", t.ID[:12], time.Since(t.StartedAt).Truncate(time.Second)))
+			b.WriteString("  " + strings.Repeat("-", 40) + "\n")
+			// Show live log with better formatting
 			log := t.GetLog()
 			for _, ev := range log {
 				switch ev.Type {
 				case "delta":
 					text := ev.Text
-					if len(text) > 200 {
-						text = text[:200] + "..."
+					if len(text) > 500 {
+						text = text[:500] + "..."
 					}
-					b.WriteString("  " + text + "\n")
+					// Wrap lines
+					for _, line := range strings.Split(text, "\n") {
+						b.WriteString("  " + line + "\n")
+					}
 				case "tool_call":
-					b.WriteString("  > " + ev.Text + "\n")
+					b.WriteString("\n  >> " + ev.Text + "\n")
 				case "tool_result":
 					text := ev.Text
-					if len(text) > 100 {
-						text = text[:100] + "..."
+					if len(text) > 300 {
+						text = text[:300] + "..."
 					}
-					b.WriteString("  = " + text + "\n\n")
+					lines := strings.Split(text, "\n")
+					for i, line := range lines {
+						if i > 8 {
+							b.WriteString("     ... (" + fmt.Sprintf("%d", len(lines)-8) + " more lines)\n")
+							break
+						}
+						b.WriteString("     " + line + "\n")
+					}
+					b.WriteString("\n")
 				case "done":
-					b.WriteString("\n  [done]\n")
+					b.WriteString("\n  -- COMPLETED --\n")
 				}
 			}
 			if t.Status == "running" {
-				b.WriteString("\n  ... running ...\n")
+				b.WriteString("\n  ... working ...\n")
 			}
 			return b.String()
 		}
 	}
+	// List view
 	tasks := mgr.ListTasks()
 	if len(tasks) == 0 {
 		return "Agents Monitor  enter=view  k=kill  esc=close\n\n  (no active tasks)"
 	}
 	var b strings.Builder
-	b.WriteString("Agents Monitor  enter=view  k=kill  r=refresh  esc=close\n\n")
+	b.WriteString("Agents Monitor  enter=view  k=kill  esc=close\n\n")
 	for i, t := range tasks {
-		prefix := "  |-- "
-		if i == len(tasks)-1 {
-			prefix = "  +-- "
+		cursor := "  "
+		if i == m.agentsIdx {
+			cursor = "> "
 		}
+		// Status indicator
+		status := "[done]"
+		switch t.Status {
+		case "running":
+			status = "[" + getSpinnerFrame(int(time.Since(t.StartedAt).Seconds())) + "]"
+		case "error":
+			status = "[ERR]"
+		}
+		// Description
 		desc := t.Agent
-		if t.Result != "" {
-			r := t.Result
-			if len(r) > 40 {
-				r = r[:40] + "..."
+		logEntries := t.GetLog()
+		if len(logEntries) > 0 {
+			last := logEntries[len(logEntries)-1]
+			switch last.Type {
+			case "tool_call":
+				desc += " > " + last.Text
+			case "delta":
+				txt := last.Text
+				if len(txt) > 40 {
+					txt = txt[:40] + "..."
+				}
+				desc += ": " + strings.ReplaceAll(txt, "\n", " ")
 			}
-			desc += ": " + r
+		}
+		if len(desc) > 60 {
+			desc = desc[:60] + "..."
 		}
 		elapsed := time.Since(t.StartedAt).Truncate(time.Second).String()
-		cursor := " "
-		if i == m.agentsIdx {
-			cursor = ">"
-		}
-		b.WriteString(fmt.Sprintf("%s%s[%s] %s (%s)\n", cursor, prefix, t.Status, desc, elapsed))
+		b.WriteString(fmt.Sprintf("%s%s %s (%s)\n", cursor, status, desc, elapsed))
 	}
 	return b.String()
+}
+
+func getSpinnerFrame(tick int) string {
+	frames := []string{".", "..", "...", ".."}
+	return frames[tick%len(frames)]
 }
 func (m *model) handleAgentDone(msg agentDoneMsg) (tea.Model, tea.Cmd) {
 	return m.deliverPendingReports()
