@@ -365,7 +365,7 @@ func (m *model) agentsTreeView() string {
 			var b strings.Builder
 			status := t.Status
 			if status == "running" {
-				status = "running " + getSpinnerFrame(int(time.Since(t.StartedAt).Seconds()))
+				status = "running " + getSpinnerFrame("default", int(time.Since(t.StartedAt).Seconds()))
 			}
 			b.WriteString(fmt.Sprintf("[%s] %s  esc=back  k=kill\n", t.Agent, status))
 			b.WriteString(fmt.Sprintf("  ID: %s  Elapsed: %s\n", t.ID[:12], time.Since(t.StartedAt).Truncate(time.Second)))
@@ -425,7 +425,7 @@ func (m *model) agentsTreeView() string {
 		status := "[done]"
 		switch t.Status {
 		case "running":
-			status = "[" + getSpinnerFrame(int(time.Since(t.StartedAt).Seconds())) + "]"
+			status = "[" + getSpinnerFrame("default", int(time.Since(t.StartedAt).Seconds())) + "]"
 		case "error":
 			status = "[ERR]"
 		}
@@ -454,10 +454,6 @@ func (m *model) agentsTreeView() string {
 	return b.String()
 }
 
-func getSpinnerFrame(tick int) string {
-	frames := []string{".", "..", "...", ".."}
-	return frames[tick%len(frames)]
-}
 func (m *model) handleAgentDone(msg agentDoneMsg) (tea.Model, tea.Cmd) {
 	return m.deliverPendingReports()
 }
