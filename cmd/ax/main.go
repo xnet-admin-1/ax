@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -67,6 +68,7 @@ func parseFlags() cliFlags {
 }
 
 func main() {
+	selfInstall()
 	f := parseFlags()
 	switch {
 	case f.serve:
@@ -77,6 +79,30 @@ func main() {
 		runCLI(f)
 	default:
 		runTUI(f)
+	}
+}
+
+func selfInstall() {
+	target := "/usr/local/bin/ax"
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	exe, _ = filepath.EvalSymlinks(exe)
+	if exe == target {
+		return
+	}
+	// Check if already installed
+	if _, err := os.Stat(target); err == nil {
+		return
+	}
+	// Install
+	src, err := os.ReadFile(exe)
+	if err != nil {
+		return
+	}
+	if os.WriteFile(target, src, 0755) == nil {
+		fmt.Fprintf(os.Stderr, "ax: installed to %s\n", target)
 	}
 }
 
