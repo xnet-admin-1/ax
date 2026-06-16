@@ -319,9 +319,7 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 				msg["content"] = m.Content
 			}
 		} else {
-			if m.Content != "" {
-				msg["content"] = m.Content
-			}
+			msg["content"] = m.Content
 		}
 		if len(m.ToolCalls) > 0 {
 			msg["tool_calls"] = m.ToolCalls
