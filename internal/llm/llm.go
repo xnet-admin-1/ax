@@ -281,6 +281,9 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 		}
 		return "spawn_agent not available in this context", nil
 	default:
+		if ctx.McpExecutor != nil {
+			return ctx.McpExecutor(name, args)
+		}
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
 }

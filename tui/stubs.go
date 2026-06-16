@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/xnet-admin-1/ax/internal/agent"
+	"github.com/xnet-admin-1/ax/internal/mcp"
 	"github.com/xnet-admin-1/ax/internal/engine"
 	"github.com/xnet-admin-1/ax/internal/gateway"
 	"github.com/xnet-admin-1/ax/internal/knowledge"
@@ -700,6 +701,7 @@ func (m *model) handleHandoffFromTool(result string)                       {}
 func Run(eng *engine.Engine) error {
 	backend := engine.NewLocal(eng.DB, eng.Gateway)
 	backend.AgentMgr = agent.NewManager(eng.DB, eng.Gateway)
+	backend.McpMgr = mcp.NewManager(eng.DB)
 	m := NewLocalWithOpts(backend, LaunchOpts{})
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
