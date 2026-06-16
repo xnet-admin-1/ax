@@ -54,7 +54,6 @@ func (m *model) handleCommand(input string) tea.Cmd {
 	case "/list":
 		m.panel = panelTree
 		return m.loadTree()
-		return m.loadSessions()
 	case "/knowledge":
 		if len(parts) > 1 {
 			sub := parts[1]
