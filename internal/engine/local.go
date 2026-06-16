@@ -252,6 +252,27 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			if l.AgentMgr != nil {
 				toolCtx.SpawnAgent = func(a, t string, r ...string) (string, error) { return l.AgentMgr.Spawn(a, t, r...) }
 				toolCtx.Orchestrate = func(argsJSON string) string { return l.ExecuteOrchestrate(argsJSON, ch) }
+			toolCtx.SaveMemory = func(key, value string) error {
+				_, err := l.DB.Exec("INSERT OR REPLACE INTO memories(key, content) VALUES(?,?)", key, value)
+				return err
+			}
+			toolCtx.RecallMemory = func(query string) string {
+				rows, err := l.DB.Query("SELECT key, content FROM memories WHERE key LIKE ? OR content LIKE ? LIMIT 10", "%"+query+"%", "%"+query+"%")
+				if err != nil { return "no results" }
+				defer rows.Close()
+				var results []string
+				for rows.Next() {
+					var k, v string
+					rows.Scan(&k, &v)
+					results = append(results, k+": "+v)
+				}
+				if len(results) == 0 { return "no memories found for: "+query }
+				return strings.Join(results, "\n")
+			}
+			toolCtx.DeleteMemory = func(key string) error {
+				_, err := l.DB.Exec("DELETE FROM memories WHERE key=?", key)
+				return err
+			}
 				toolCtx.GetAgentResult = func(taskID string) (string, error) {
 					for i := 0; i < 120; i++ {
 						t := l.AgentMgr.GetTask(taskID)
@@ -535,6 +556,9 @@ Rules:
 - To run ANY command: call run_sh
 - To search the web: call search_web
 - To list directory: call list_dir
+- To remember something: call save_memory
+- To recall info: call recall_memory
+- To forget: call delete_memory
 - To delegate work: call spawn_agent with agent name (architect, coder, researcher, qa, security, devops, writer)
 
 For complex tasks, use the orchestrate tool to run a multi-agent pipeline:
