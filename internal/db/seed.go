@@ -82,3 +82,40 @@ func SeedFromDefaults(db *sql.DB) error {
 	db.Exec("UPDATE settings SET value='google-ai-studio/models/gemma-4-31b-it' WHERE key='selected_model' AND value=''")
 	return nil
 }
+
+func SeedFromEmbedded(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM providers").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	return seedFromJSON(db, embeddedProviders)
+}
+
+func seedFromJSON(db *sql.DB, data []byte) error {
+	var config struct {
+		Providers []struct {
+			Name         string   `json:"name"`
+			APIKey       string   `json:"apiKey"`
+			APIBase      string   `json:"apiBase"`
+			Enabled      bool     `json:"enabled"`
+			CachedModels []string `json:"cachedModels"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+	for _, p := range config.Providers {
+		models, _ := json.Marshal(p.CachedModels)
+		enabled := 0
+		if p.Enabled {
+			enabled = 1
+		}
+		db.Exec("INSERT OR IGNORE INTO providers(name, api_key, api_base, enabled, models) VALUES(?,?,?,?,?)",
+			p.Name, p.APIKey, p.APIBase, enabled, string(models))
+	}
+	db.Exec("INSERT OR IGNORE INTO settings(key, value) VALUES('selected_model', 'google-ai-studio/models/gemma-4-31b-it')")
+	return nil
+}

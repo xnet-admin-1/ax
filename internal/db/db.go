@@ -24,10 +24,10 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	// Seed providers on first run
+	// Seed providers - try file override first, then embedded defaults
 	configPath := filepath.Join(os.Getenv("HOME"), "aiope-agentx", "gateway-config.json")
 	if err := SeedProviders(db, configPath); err != nil {
-		SeedFromDefaults(db)
+		SeedFromEmbedded(db)
 	}
 	return db, nil
 }
