@@ -216,6 +216,10 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 	defer close(ch)
 	defer func() { l.mu.Lock(); delete(l.cancels, convID); l.mu.Unlock() }()
 	messages, _ := l.GetMessages(convID)
+	// Cap history to last 40 messages to prevent context overflow
+	if len(messages) > 40 {
+		messages = messages[len(messages)-40:]
+	}
 	// Prepend system prompt
 	sys := l.systemPrompt()
 	if sys != "" {
