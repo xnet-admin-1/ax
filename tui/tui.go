@@ -641,6 +641,20 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.ctrlCPressed = true
 		return m, nil
+	case "W":
+		if m.panel != panelNone {
+			m.panelVp.LineUp(1)
+		} else {
+			m.vp.LineUp(1)
+		}
+		return m, nil
+	case "S":
+		if m.panel != panelNone {
+			m.panelVp.LineDown(1)
+		} else {
+			m.vp.LineDown(1)
+		}
+		return m, nil
 	case "ctrl+d":
 		if m.panel != panelNone {
 			m.panelVp.HalfPageDown()
