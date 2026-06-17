@@ -678,6 +678,21 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "ctrl+a":
+		// Copy all chat to clipboard
+		var all strings.Builder
+		for _, msg := range m.msgs {
+			all.WriteString(msg.role + ": " + msg.content + "\n\n")
+		}
+		clipboard.WriteAll(all.String())
+		m.addSystemMsg("All chat copied to clipboard")
+		return m, nil
+	case "ctrl+v":
+		// Paste from clipboard into input
+		if text, err := clipboard.ReadAll(); err == nil && text != "" {
+			m.input.ta.InsertString(text)
+		}
+		return m, nil
 	case "ctrl+k":
 		m.palette.toggle()
 		return m, nil
