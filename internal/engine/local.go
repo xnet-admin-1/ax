@@ -216,9 +216,13 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 	defer close(ch)
 	defer func() { l.mu.Lock(); delete(l.cancels, convID); l.mu.Unlock() }()
 	messages, _ := l.GetMessages(convID)
-	// Cap history to last 40 messages to prevent context overflow
-	if len(messages) > 40 {
-		messages = messages[len(messages)-40:]
+	// Cap history: ~200 tokens/msg avg, keep 75% of 64k context budget = 240 msgs
+	maxMsgs := 240
+	if cfg, ok := l.GetModelConfig(); ok && cfg.ContextTokens > 0 {
+		maxMsgs = (cfg.ContextTokens * 75 / 100) / 200
+	}
+	if len(messages) > maxMsgs {
+		messages = messages[len(messages)-maxMsgs:]
 	}
 	// Prepend system prompt
 	sys := l.systemPrompt()
