@@ -703,14 +703,14 @@ func Run(eng *engine.Engine) error {
 	backend.AgentMgr = agent.NewManager(eng.DB, eng.Gateway)
 	backend.McpMgr = mcp.NewManager(eng.DB)
 	m := NewLocalWithOpts(backend, LaunchOpts{})
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }
 
 // RunWithModel starts the TUI with a pre-configured model.
 func RunWithModel(m tea.Model) error {
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }

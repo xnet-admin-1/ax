@@ -210,7 +210,7 @@ func (m *model) Init() tea.Cmd {
 			m.backend.SetModel(model)
 		}
 	}
-	cmds := []tea.Cmd{m.input.ta.Focus(), tea.EnableBracketedPaste, m.spinner.Tick, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })}
+	cmds := []tea.Cmd{m.input.ta.Focus(), tea.EnableMouseCellMotion, tea.EnableBracketedPaste, m.spinner.Tick, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })}
 	// Launch with agent handoff if specified
 	if m.launchAgent != "" {
 		cmds = append(cmds, func() tea.Msg {
