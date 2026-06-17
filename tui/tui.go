@@ -277,11 +277,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleHandoff(string(msg))
 
 	case renderTickMsg:
-		if m.streaming {
+		if m.streaming || m.panel == panelAgents {
 			m.updateViewport()
 			return m, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 		}
-		return m, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })
+		// Slow tick when idle (1s) for agent poll updates
+		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 
 	case progress.FrameMsg:
 		pm, cmd := m.progress.Update(msg)
