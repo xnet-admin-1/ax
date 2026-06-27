@@ -1,6 +1,12 @@
 # ax
 
-A terminal AI agent with full filesystem, shell, and network access. Single binary, multi-provider, multi-agent.
+An autonomous terminal agent that operates directly on your system. ax connects to any OpenAI-compatible LLM and gives it unrestricted access to your shell, filesystem, and network — turning it into a hands-on collaborator that reads code, runs commands, edits files, searches the web, and delegates work to specialized sub-agents.
+
+Built as a single Go binary with zero runtime dependencies. No npm, no pip, no Docker. Download it, run it, and it self-installs. It stores conversations, provider credentials, and persistent memories in a local SQLite database. Switch between models mid-conversation. Run it over SSH. Deploy it headless.
+
+ax is not a chatbot with tool access bolted on. It is a working environment where the LLM is the operator. It reads before it writes. It uses structured SEARCH/REPLACE edits instead of rewriting entire files. When an edit fails, it sees the error and retries with corrected input (up to 3 attempts). When a task is too large for one agent, it orchestrates a pipeline of parallel workers — each with their own tool access and context — and synthesizes their results.
+
+The TUI is built on Charm (Bubbletea + Lipgloss + Glamour) with full markdown rendering, syntax-highlighted tool output, message bubbles, light/dark themes, and keyboard-driven navigation. The CLI mode runs one-shot prompts for scripting and automation.
 
 ## Install
 
