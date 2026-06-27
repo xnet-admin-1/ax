@@ -155,7 +155,7 @@ func (m *model) themePanelView() string {
 	for i, t := range themeOptions {
 		active := ""
 		if (t == "dark" && activeTheme == themeDark) || (t == "light" && activeTheme == themeLight) {
-			active = " ●"
+			active = " *"
 		}
 		if t == "system" && os.Getenv("AX_THEME") == "" && i == themeIdx {
 			// system is selected

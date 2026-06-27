@@ -193,7 +193,7 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		m.confirmCmd = ev.ToolName
 		m.confirmReason = ev.ToolResult
 		m.confirmCh = ev.ConfirmCh
-		m.addSystemMsg(fmt.Sprintf("⚠ Dangerous: %s (%s) — y/n?", ev.ToolName, ev.ToolResult))
+		m.addSystemMsg(fmt.Sprintf("[!] Dangerous: %s (%s) — y/n?", ev.ToolName, ev.ToolResult))
 		m.updateViewport()
 		return m, nil // stop reading events until user responds
 	case "error":
