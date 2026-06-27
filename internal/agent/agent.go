@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/xnet-admin-1/ax/internal/debug"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -201,6 +202,7 @@ func (m *Manager) SaveRoster(agents []Agent) error {
 
 func (m *Manager) Spawn(agentName, task string, reportTo ...string) (string, error) {
 	roster := m.GetRoster()
+	debug.D.Info("agent spawn: %s task=%q", agentName, task)
 	var ag *Agent
 	for i := range roster {
 		if roster[i].Name == agentName {

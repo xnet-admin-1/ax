@@ -2,6 +2,7 @@ package engine
 
 import (
 	"database/sql"
+	"github.com/xnet-admin-1/ax/internal/debug"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -186,6 +187,7 @@ func (e *Engine) SetModel(model string) {
 
 func (e *Engine) Chat(ctx context.Context, messages []Message, onEvent func(Event)) error {
 	model := e.SelectedModel()
+	debug.D.Info("chat: model=%s msgs=%d", model, len(messages))
 	if model == "" {
 		return fmt.Errorf("no model selected")
 	}
@@ -420,6 +422,7 @@ func executeTool(name, argsJSON string) string {
 }
 
 func toolRunSh(command string) string {
+	debug.D.Verbose("tool: run_sh cmd=%q", command)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)

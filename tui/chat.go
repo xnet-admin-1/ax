@@ -321,3 +321,19 @@ func wordWrap(text string, width int) string {
 	}
 	return strings.TrimRight(result.String(), "\n")
 }
+
+// looksLikeCode returns true if content appears to be source code or structured output
+func looksLikeCode(s string) bool {
+	indicators := []string{"func ", "def ", "class ", "import ", "package ", "const ", "var ", "type ", "{", "};", "=>", "->"}
+	lines := strings.SplitN(s, "\n", 10)
+	hits := 0
+	for _, line := range lines {
+		for _, ind := range indicators {
+			if strings.Contains(line, ind) {
+				hits++
+				break
+			}
+		}
+	}
+	return hits >= 2
+}

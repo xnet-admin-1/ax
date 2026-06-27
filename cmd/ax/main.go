@@ -5,12 +5,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 func init() {
-	lipgloss.SetHasDarkBackground(true)
+	// Theme set by DetectTheme() in TUI init
 	if f, err := os.OpenFile("/tmp/ax.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		log.SetOutput(f)
 	}
@@ -26,6 +24,7 @@ type cliFlags struct {
 	models   bool
 	trustAll bool
 	serve    bool
+	debug    bool
 }
 
 func parseFlags() cliFlags {
@@ -45,6 +44,8 @@ func parseFlags() cliFlags {
 			f.models = true
 		case "--trust-all":
 			f.trustAll = true
+		case "-d", "--debug":
+			f.debug = true
 		case "-r":
 			f.resume = true
 		case "-m":

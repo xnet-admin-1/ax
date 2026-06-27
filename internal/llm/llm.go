@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"github.com/xnet-admin-1/ax/internal/debug"
 	"fmt"
 	"encoding/json"
 	"io"
@@ -140,6 +141,7 @@ func IsDangerous(command string) (bool, string) {
 }
 
 func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, error) {
+	debug.D.Info("tool: %s", name)
 	switch name {
 	case "run_sh":
 		command := str(args, "command")

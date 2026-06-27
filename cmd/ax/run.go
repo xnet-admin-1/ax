@@ -8,10 +8,17 @@ import (
 	"strings"
 
 	"github.com/xnet-admin-1/ax/internal/db"
+	"github.com/xnet-admin-1/ax/internal/debug"
 	"github.com/xnet-admin-1/ax/internal/engine"
 	"github.com/xnet-admin-1/ax/internal/gateway"
 	"github.com/xnet-admin-1/ax/tui"
 )
+
+func initDebug(f cliFlags) {
+	if f.debug {
+		debug.D.SetLevel(debug.Verbose)
+	}
+}
 
 func openDB() (*sql.DB, *gateway.Router) {
 	database, err := db.Open(db.DefaultPath())
@@ -33,6 +40,8 @@ func runListModels() {
 }
 
 func runCLI(f cliFlags) {
+	initDebug(f)
+	debug.D.Info("cli: prompt=%q model=%s resume=%v", f.prompt, f.model, f.resume)
 	database, gw := openDB()
 	defer database.Close()
 
@@ -92,6 +101,7 @@ func runCLI(f cliFlags) {
 }
 
 func runTUI(f cliFlags) {
+	initDebug(f)
 	database, gw := openDB()
 	defer database.Close()
 

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/xnet-admin-1/ax/internal/debug"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,7 @@ func NewRouter(db *sql.DB) *Router {
 }
 
 func (r *Router) Resolve(displayID string) (apiBase, apiKey, model string, err error) {
+	debug.D.Verbose("gateway resolve: %s", displayID)
 	idx := strings.Index(displayID, "/")
 	if idx <= 0 {
 		return "", "", "", fmt.Errorf("invalid model ID: %s", displayID)
