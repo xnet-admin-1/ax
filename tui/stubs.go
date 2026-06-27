@@ -180,11 +180,12 @@ func (m *model) deliverPendingReports() (tea.Model, tea.Cmd) {
 				}
 
 				if t.ReportTo == "agent" {
-					// Feed back to main agent as context
-					prompt := fmt.Sprintf("[Agent %s completed]\n\n%s\n\nPresent these findings to the user.", t.Agent, result)
-					m.msgs = append(m.msgs, chatMsg{role: "tool_result", content: label})
+					// Feed back to main agent as context with clear header
+					header := fmt.Sprintf("spawned agent \"%s\" returned (task_id: %s)", t.Agent, t.ID[:8])
+					m.msgs = append(m.msgs, chatMsg{role: "agent_result", content: fmt.Sprintf("[%s] %s", t.Agent, result)})
 					m.cachedMsgCount = 0
 					if !m.streaming {
+						prompt := fmt.Sprintf("[%s]\nAgent \"%s\" (task_id: %s) completed and returned the above result. Integrate this into your response naturally — summarize key findings, answer the user's original question, or proceed with the next step.", header, t.Agent, t.ID[:8])
 						return m, m.startChat(prompt)
 					}
 				} else {

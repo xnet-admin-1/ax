@@ -116,10 +116,10 @@ func renderBubbleMessages(msgs []chatMsg, width int, showToolDetail bool, expand
 
 		case "system":
 			content := m.content
-			if strings.HasPrefix(content, "Error") || strings.HasPrefix(content, "Spawn failed") {
-				b.WriteString(errorBubble.Width(bubbleWidth).Render(content) + "\n\n")
+			if strings.HasPrefix(content, "Error") || strings.HasPrefix(content, "Spawn failed") || strings.Contains(content, "error") {
+				b.WriteString(errorBubble.Width(bubbleWidth).Render(wrapText(content, bubbleWidth-4)) + "\n\n")
 			} else {
-				b.WriteString(systemBubble.Render(content) + "\n\n")
+				b.WriteString(systemBubble.Width(bubbleWidth).Render(wrapText(content, bubbleWidth-4)) + "\n\n")
 			}
 
 		case "tool_call":
@@ -130,7 +130,7 @@ func renderBubbleMessages(msgs []chatMsg, width int, showToolDetail bool, expand
 				if len(parts) > 1 {
 					args = parts[1]
 				}
-				header := toolNameBadge.Render("⚡ "+name) + " " + timestampStyle.Render(truncateStr(args, 60))
+				header := toolNameBadge.Render(""+name) + " " + timestampStyle.Render(truncateStr(args, 60))
 				b.WriteString(toolBubble.Width(bubbleWidth).Render(header) + "\n")
 			}
 

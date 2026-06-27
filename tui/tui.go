@@ -562,7 +562,7 @@ func (m *model) View() string {
 	}
 	// Floating confirm dialog for dangerous commands
 	if m.confirmCh != nil {
-		content := toolNameBadge.Render("⚠ "+m.confirmCmd) + "\n\n" +
+		content := toolNameBadge.Render("[!] "+m.confirmCmd) + "\n\n" +
 			lipgloss.NewStyle().Foreground(tokyoComment).Render(m.confirmReason) + "\n\n" +
 			helpKeyStyle.Render("y") + " approve  " + helpKeyStyle.Render("n") + " deny"
 		overlay := floatingDialog("Confirm Execution", content, 60)
@@ -707,7 +707,7 @@ func (m *model) statusBar() string {
 	}
 	agentStr := ""
 	if agents > 0 {
-		agentStr = fmt.Sprintf(" ⚡%d", agents)
+		agentStr = fmt.Sprintf(" [%d agents]", agents)
 	}
 
 	left := fmt.Sprintf(" [%s] %s %s", modeInd, ind, title)

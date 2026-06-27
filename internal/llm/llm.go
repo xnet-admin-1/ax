@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"github.com/xnet-admin-1/ax/internal/debug"
+	"github.com/xnet-admin-1/ax/internal/edit"
 	"fmt"
 	"encoding/json"
 	"io"
@@ -81,6 +82,12 @@ var BuiltinTools = []ToolDef{
 			"path":    map[string]any{"type": "string", "description": "File path"},
 			"content": map[string]any{"type": "string", "description": "File content"},
 		}, "required": []string{"path", "content"}}},
+	{Name: "edit_file", Description: "Edit a file using SEARCH/REPLACE. More precise than write_file.", Parameters: map[string]any{
+		"type": "object", "properties": map[string]any{
+			"path":    map[string]any{"type": "string", "description": "File path to edit"},
+			"search":  map[string]any{"type": "string", "description": "Exact lines to find"},
+			"replace": map[string]any{"type": "string", "description": "Replacement content"},
+		}, "required": []string{"path", "search", "replace"}}},
 	{Name: "list_dir", Description: "List directory entries", Parameters: map[string]any{
 		"type": "object", "properties": map[string]any{
 			"path": map[string]any{"type": "string", "description": "Directory path"},
@@ -89,11 +96,10 @@ var BuiltinTools = []ToolDef{
 		"type": "object", "properties": map[string]any{
 			"query": map[string]any{"type": "string", "description": "Search query"},
 		}, "required": []string{"query"}}},
-	{Name: "spawn_agent", Description: "Spawn a background agent to work on a task autonomously. Returns task ID.", Parameters: map[string]any{
+	{Name: "orchestrate", Description: "Run a multi-step pipeline of parallel and sequential agent tasks", Parameters: map[string]any{
 		"type": "object", "properties": map[string]any{
-			"agent": map[string]any{"type": "string", "description": "Agent name from roster (or 'default' for general agent)"},
-			"task":  map[string]any{"type": "string", "description": "Task description for the agent to complete"},
-		}, "required": []string{"task"}}},
+			"stages": map[string]any{"type": "array", "description": "Array of stage objects: [{name, agent, task, depends_on?}]"},
+		}, "required": []string{"stages"}}},
 }
 
 func str(args map[string]any, key string) string {
@@ -203,6 +209,15 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 			return "", err
 		}
 		if err := os.WriteFile(p, []byte(str(args, "content")), 0o644); err != nil {
+			return "", err
+		}
+		return "ok", nil
+	case "edit_file":
+		p := str(args, "path")
+		search := str(args, "search")
+		replace := str(args, "replace")
+		debug.D.Info("tool: edit_file path=%s search_len=%d replace_len=%d", p, len(search), len(replace))
+		if err := edit.Apply(p, search, replace); err != nil {
 			return "", err
 		}
 		return "ok", nil

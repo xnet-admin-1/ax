@@ -115,6 +115,22 @@ var toolDefs = []map[string]any{
 	{
 		"type": "function",
 		"function": map[string]any{
+			"name":        "edit_file",
+			"description": "Edit a file using SEARCH/REPLACE. Provide the exact lines to find (SEARCH) and what to replace them with (REPLACE). More precise than write_file — preserves the rest of the file. Use empty search to append. Use empty replace to delete lines.",
+			"parameters": map[string]any{
+				"type":     "object",
+				"required": []string{"path", "search", "replace"},
+				"properties": map[string]any{
+					"path":    map[string]string{"type": "string", "description": "File path to edit"},
+					"search":  map[string]string{"type": "string", "description": "Exact lines to find in the file (must match existing content)"},
+					"replace": map[string]string{"type": "string", "description": "Replacement content"},
+				},
+			},
+		},
+	},
+	{
+		"type": "function",
+		"function": map[string]any{
 			"name":        "list_dir",
 			"description": "List directory contents",
 			"parameters": map[string]any{
@@ -136,35 +152,6 @@ var toolDefs = []map[string]any{
 				"required": []string{"query"},
 				"properties": map[string]any{
 					"query": map[string]string{"type": "string", "description": "Search query"},
-				},
-			},
-		},
-	},
-	{
-		"type": "function",
-		"function": map[string]any{
-			"name":        "spawn_agent",
-			"description": "Spawn a background agent. Results report back to you automatically. Available agents: architect (system design), coder (implementation), researcher (web search + synthesis), qa (testing), security (audit), devops (infrastructure), writer (documentation). Use 'default' for general tasks.",
-			"parameters": map[string]any{
-				"type":     "object",
-				"required": []string{"agent", "task"},
-				"properties": map[string]any{
-					"agent": map[string]string{"type": "string", "description": "Agent name: architect, coder, researcher, qa, security, devops, writer, or default"},
-					"task":  map[string]string{"type": "string", "description": "Task description for the agent"},
-				},
-			},
-		},
-	},
-	{
-		"type": "function",
-		"function": map[string]any{
-			"name":        "get_agent_result",
-			"description": "Wait for a spawned agent to complete and return its result. Blocks until done (max 120s).",
-			"parameters": map[string]any{
-				"type":     "object",
-				"required": []string{"task_id"},
-				"properties": map[string]any{
-					"task_id": map[string]string{"type": "string", "description": "Task ID returned by spawn_agent"},
 				},
 			},
 		},
@@ -201,6 +188,8 @@ func (e *Engine) Chat(ctx context.Context, messages []Message, onEvent func(Even
 	if sys != "" {
 		messages = append([]Message{{Role: "system", Content: sys}}, messages...)
 	}
+	maxReflections := 3
+	reflections := 0
 	for {
 		messages = e.maybeCompact(ctx, apiBase, apiKey, upstreamModel, messages)
 
@@ -261,6 +250,14 @@ func (e *Engine) Chat(ctx context.Context, messages []Message, onEvent func(Even
 				result, err := llm.ExecuteTool(tc.Function.Name, args, toolCtx)
 				if err != nil {
 					result = "error: " + err.Error()
+					reflections++
+					debug.D.Info("reflection %d/%d: %s failed: %s", reflections, maxReflections, tc.Function.Name, err.Error())
+					if reflections > maxReflections {
+						onEvent(Event{Type: "tool_result", Tool: tc.Function.Name, Result: result})
+						messages = append(messages, Message{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
+						onEvent(Event{Type: "end", Delta: "Max retries reached. Last error: " + err.Error()})
+						return nil
+					}
 				}
 				onEvent(Event{Type: "tool_result", Tool: tc.Function.Name, Result: result})
 				messages = append(messages, Message{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
