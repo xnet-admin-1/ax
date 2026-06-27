@@ -24,7 +24,7 @@ var slashCommands = []string{
 	// Mode
 	"/mode",
 	// Meta
-	"/help", "/exit",
+	"/help", "/exit", "/debug", "/theme",
 }
 
 type inputModel struct {

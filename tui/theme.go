@@ -281,6 +281,10 @@ func (m *model) helpBar() string {
 	case m.panel == panelTree:		keys = []string{helpKey("enter", "switch"), helpKey("esc", "close")}
 	case m.panel == panelCompact:
 		keys = []string{helpKey("enter", "run"), helpKey("esc", "close")}
+	case m.panel == panelDebug:
+		keys = []string{helpKey("tab", "cycle"), helpKey("enter", "on/off"), helpKey("esc", "back")}
+	case m.panel == panelTheme:
+		keys = []string{helpKey("tab", "cycle"), helpKey("enter", "apply"), helpKey("esc", "back")}
 	case m.panel != panelNone:
 		keys = []string{helpKey("esc", "close")}
 	case m.streaming:

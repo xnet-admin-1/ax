@@ -29,6 +29,8 @@ const (
 	panelSpawn
 	panelAgentBuilder
 	panelTree
+	panelDebug
+	panelTheme
 )
 
 func (m *model) handleCommand(input string) tea.Cmd {
@@ -39,6 +41,10 @@ func (m *model) handleCommand(input string) tea.Cmd {
 	cmd := parts[0]
 
 	switch cmd {
+	case "/debug":
+		m.togglePanel(panelDebug)
+	case "/theme":
+		m.togglePanel(panelTheme)
 	case "/help":
 		m.togglePanel(panelHelp)
 	case "/model":
@@ -232,6 +238,10 @@ func (m *model) panelView(width int) string {
 		return "Knowledge Base\n\nUse /knowledge <query> to search"
 	case panelTree:
 		return m.treePanelView()
+	case panelDebug:
+		return m.debugPanelView()
+	case panelTheme:
+		return m.themePanelView()
 	}
 	return ""
 }
