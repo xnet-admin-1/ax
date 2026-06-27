@@ -1,0 +1,32 @@
+Business Source License 1.1
+
+Licensor:             xnet-admin-1
+Licensed Work:        AX (github.com/xnet-admin-1/ax)
+Additional Use Grant: You may use the Licensed Work in any non-production
+                      environment and for internal business purposes. You may
+                      not distribute the Licensed Work as part of a product
+                      or service that competes with the Licensor's offerings.
+Change Date:          2030-06-27
+Change License:       Apache License, Version 2.0
+
+---
+
+Terms
+
+The Licensor hereby grants you the right to copy, modify, create derivative
+works, redistribute, and make non-production use of the Licensed Work. The
+Licensor may make additional use grants in the Licensed Work's documentation.
+
+Any use of the Licensed Work in violation of this License or the Additional
+Use Grant will automatically terminate your rights under this License for the
+current and all future versions of the Licensed Work.
+
+The Licensed Work is provided "as is" and without any warranty of any kind,
+express or implied. The Licensor disclaims all liability for damages arising
+from the use of the Licensed Work to the fullest extent permitted by law.
+
+---
+
+This license is the Business Source License 1.1, originally developed by
+MariaDB Corporation. The full text of the BSL 1.1 can be found at:
+https://mariadb.com/bsl11/

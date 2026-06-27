@@ -3,7 +3,7 @@
 > **A** autonomous terminal a**x** — an LLM-operated shell-native agent.
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
-[![License](https://img.shields.io/badge/License-Proprietary-blue)](#license)
+[![License](https://img.shields.io/badge/License-BUSL%201.1-blue)](#license)
 [![Size](https://img.shields.io/badge/Size-25MB%20static%20binary-success)](https://github.com/xnet-admin-1/ax/releases)
 [![Platform](https://img.shields.io/badge/Platform-linux%20%7C%20macOS%20%7C%20WSL-lightgrey)](#install)
 [![TUI](https://img.shields.io/badge/TUI-Bubbletea-ff69b4)](#tui-commands)
@@ -35,6 +35,7 @@ commands, edits files, searches the web, and delegates work to specialized sub-a
 - [Troubleshooting](#troubleshooting)
 - [Build from Source](#build-from-source)
 - [License](#license)
+- [Dependencies](#dependencies)
 
 ---
 
@@ -607,7 +608,20 @@ sudo cp ax /usr/local/bin/ax
 
 ## License
 
-Proprietary. Copyright © XNet.
+Licensed under the **Business Source License 1.1** (BUSL-1.1).
+
+- **Licensor:** xnet-admin-1
+- **Change Date:** 2030-06-27 (automatically converts to Apache License 2.0)
+- **Additional Use Grant:** Non-production use and internal business use are free.
+  Redistribution as part of a competing product or service is not permitted.
+
+See [LICENSE](./LICENSE) for the full terms.
+
+## Dependencies
+
+All third-party dependencies used by AX are listed in [DEPENDENCIES.md](./DEPENDENCIES.md)
+with their respective licenses. AX builds on MIT, BSD-3-Clause, and Apache-2.0
+licensed open-source libraries.
 
 ---
 
