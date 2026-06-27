@@ -80,37 +80,37 @@ ax -r
 Most AI coding tools lock you into one provider, one repo, one language, and a dependency
 tree that breaks on every update. ax takes a different position:
 
-### 🧠 You Own the Binary
+### You Own the Binary
 25 MB, statically compiled, runs anywhere Go compiles. No `node_modules`, no `virtualenvs`,
 no containers. Copy it to a server over `scp` and it works.
 
-### 🗂️ You Own the Context
+### You Own the Context
 ax operates on your actual filesystem. It doesn't clone repos into sandboxes or limit you
 to one project. Point it at anything — a Go service, a Kotlin app, Terraform configs,
 a research paper — in the same conversation.
 
-### 🔀 You Choose the Model
+### You Choose the Model
 Any OpenAI-compatible endpoint. Run local models through **Ollama**, route through
 **OpenRouter**, or hit **OpenAI / Anthropic / DeepSeek / Gemini** directly. Switch
 mid-conversation. Use a cheap model for background agents and an expensive one for
 the main thread.
 
-### 🎭 Agents Are First-Class
+### Agents Are First-Class
 Not a prompt wrapper — real background goroutines with independent tool access,
 configurable system prompts, and **DAG-based orchestration**. Spawn a researcher,
 architect, and coder in parallel. Results flow between stages automatically.
 
-### ✂️ Edits Are Precise
+### Edits Are Precise
 SEARCH/REPLACE blocks with a **three-tier fallback chain** (exact → indent-flexible →
 trimmed). The LLM doesn't rewrite your 500-line file to change one function — it targets
 the exact lines and the engine handles indentation mismatches gracefully.
 
-### 🔁 Errors Are Learning
+### Errors Are Learning
 When a tool fails, the error goes back to the LLM as context. It sees what went wrong,
 adjusts, and retries. **Up to three attempts** before giving up — the same way a
 human developer iterates.
 
-### 📋 Compare Side-by-Side
+### Compare Side-by-Side
 See the full feature comparison with [Kiro CLI](./COMPARISON.md).
 
 ---
@@ -611,7 +611,7 @@ Proprietary. Copyright © XNet.
 
 ---
 
-### 📚 Further Reading
+### Further Reading
 
 - [Feature Specification (SPEC.md)](./SPEC.md) — Detailed TUI/CLI feature parity docs
 - [Comparison with Kiro CLI (COMPARISON.md)](./COMPARISON.md) — Side-by-side feature matrix
