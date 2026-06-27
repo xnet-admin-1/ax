@@ -118,6 +118,13 @@ See the full feature comparison with [Kiro CLI](./COMPARISON.md).
 
 ## Install
 
+### One-Liner Install
+
+```bash
+curl -L https://github.com/xnet-admin-1/ax/releases/latest/download/ax-linux-amd64 -o /usr/local/bin/ax && chmod +x /usr/local/bin/ax && ax
+```
+*Replace `linux-amd64` with `darwin-amd64` or `darwin-arm64` for macOS.*
+
 ### Prebuilt Binary (Recommended)
 
 ```bash
