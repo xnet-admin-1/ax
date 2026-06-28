@@ -498,12 +498,11 @@ func (m *model) View() string {
 	}
 
 	status := m.statusBar()
-	tokenBar := renderTokenBar(m.tokens, 128000, m.width)
 	inputView := m.input.View()
 	inputH := lipgloss.Height(inputView)
 
-	// Layout: status(1) + tokenbar(1) + chat + activity(1) + input(inputH) + help(1)
-	chatH := m.height - 4 - inputH
+	// Layout: status(1) + chat + activity(1) + input(inputH) + help(1)
+	chatH := m.height - 3 - inputH
 	if chatH < 3 {
 		chatH = 3
 	}
@@ -560,9 +559,9 @@ func (m *model) View() string {
 	var base string
 	if layout == layoutCompact {
 		// Compact: no help bar, minimal chrome
-		base = lipgloss.JoinVertical(lipgloss.Left, status, tokenBar, chatView, activityLine, inputView)
+		base = lipgloss.JoinVertical(lipgloss.Left, status, chatView, activityLine, inputView)
 	} else {
-		base = lipgloss.JoinVertical(lipgloss.Left, status, tokenBar, chatView, activityLine, inputView, helpLine)
+		base = lipgloss.JoinVertical(lipgloss.Left, status, chatView, activityLine, inputView, helpLine)
 	}
 	if m.inspector.showing {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.inspector.view(m.width, m.height), lipgloss.WithWhitespaceChars(" "))

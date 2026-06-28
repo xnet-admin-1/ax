@@ -166,7 +166,7 @@ func (p *paletteModel) view(width, height int) string {
 	content := strings.Join(lines, "\n")
 
 	box := lipgloss.NewStyle().
-		Border(lipgloss.ThickBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tokyoPurple).
 		Padding(1, 2).
 		Width(boxW).

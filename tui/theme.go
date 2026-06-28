@@ -78,7 +78,7 @@ var (
 
 	// Panels
 	panelStyle = lipgloss.NewStyle().
-			Border(lipgloss.ThickBorder()).
+			Border(lipgloss.RoundedBorder()).
 			BorderForeground(tokyoPurple).
 			Padding(1)
 
@@ -88,11 +88,11 @@ var (
 
 	// Input
 	inputStyle = lipgloss.NewStyle().
-			Border(lipgloss.ThickBorder()).
-			BorderForeground(lipgloss.Color("#4a5280"))
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(tokyoGutter)
 
 	inputActiveStyle = lipgloss.NewStyle().
-				Border(lipgloss.ThickBorder()).
+				Border(lipgloss.RoundedBorder()).
 				BorderForeground(tokyoBlue)
 
 	placeholderColor = lipgloss.AdaptiveColor{Light: "#94a3b8", Dark: "#565f89"}

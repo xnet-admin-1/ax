@@ -17,14 +17,14 @@ import (
 // Message bubble styles
 var (
 	userBubble = lipgloss.NewStyle().
-			Border(lipgloss.ThickBorder()).
-			BorderForeground(lipgloss.Color("#89b4fa")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(tokyoBlue).
 			Padding(0, 1).
 			MarginLeft(4)
 
 	assistantBubble = lipgloss.NewStyle().
-			Border(lipgloss.ThickBorder()).
-			BorderForeground(lipgloss.Color("#cba6f7")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(tokyoPurple).
 			BorderLeft(true).
 			BorderRight(true).
 			BorderTop(true).
@@ -33,19 +33,19 @@ var (
 
 	toolBubble = lipgloss.NewStyle().
 			Border(lipgloss.HiddenBorder()).
-			BorderForeground(lipgloss.Color("#a6e3a1")).
+			BorderForeground(tokyoGreen).
 			BorderLeft(true).
 			Padding(0, 1).
 			Foreground(tokyoComment)
 
 	agentBubble = lipgloss.NewStyle().
-			Border(lipgloss.ThickBorder()).
-			BorderForeground(lipgloss.Color("#d0a0ff")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#bb86fc")).
 			Padding(0, 1)
 
 	errorBubble = lipgloss.NewStyle().
-			Border(lipgloss.ThickBorder()).
-			BorderForeground(lipgloss.Color("#ff6680")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(tokyoRed).
 			Padding(0, 1)
 
 	systemBubble = lipgloss.NewStyle().
@@ -98,9 +98,6 @@ func renderBubbleMessages(msgs []chatMsg, width int, showToolDetail bool, expand
 	for i, m := range msgs {
 		switch m.role {
 		case "user":
-			if i > 0 {
-				b.WriteString(renderSeparator(bubbleWidth) + "\n")
-			}
 			b.WriteString(roleBadgeUser.Render(" You ") + "\n")
 			content := wrapText(m.content, bubbleWidth-4)
 			b.WriteString(userBubble.Width(bubbleWidth).Render(content) + "\n\n")
@@ -133,13 +130,14 @@ func renderBubbleMessages(msgs []chatMsg, width int, showToolDetail bool, expand
 
 		case "tool_call":
 			if m.content != "" {
-				parts := strings.SplitN(m.content, "(", 2)
+				parts := strings.SplitN(m.content, " ", 2)
 				name := parts[0]
 				args := ""
 				if len(parts) > 1 {
-					args = strings.TrimSuffix(parts[1], ")")
+					args = parts[1]
 				}
-				b.WriteString(renderToolCard(name, args, "", bubbleWidth) + "\n")
+				header := toolNameBadge.Render(""+name) + " " + timestampStyle.Render(truncateStr(args, 60))
+				b.WriteString(toolBubble.Width(bubbleWidth).Render(header) + "\n")
 			}
 
 		case "tool_result":
@@ -149,18 +147,17 @@ func renderBubbleMessages(msgs []chatMsg, width int, showToolDetail bool, expand
 			isExpanded := showToolDetail || expanded[i]
 			if isExpanded {
 				rendered := m.content
+				// Run through Glamour if it looks like code or markdown
 				if r != nil && (looksLikeMarkdown(rendered) || looksLikeCode(rendered)) {
 					if glamOut, err := r.Render("```\n" + rendered + "\n```"); err == nil && strings.TrimSpace(glamOut) != "" {
 						rendered = strings.TrimSpace(glamOut)
 					}
-				} else if isDiff(rendered) {
-					rendered = renderDiff(rendered)
 				} else {
 					rendered = renderToolResult(rendered, bubbleWidth-4)
 				}
 				b.WriteString(toolBubble.Width(bubbleWidth).Render(rendered) + "\n\n")
 			} else {
-				summary := fmt.Sprintf("  result: %d bytes", len(m.content))
+				summary := fmt.Sprintf("  ╰─ %d bytes", len(m.content))
 				b.WriteString(toolBubble.Render(timestampStyle.Render(summary+" (ctrl+o expand)")) + "\n\n")
 			}
 
