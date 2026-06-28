@@ -136,10 +136,19 @@ func matchWithIndentOffset(content, search []string) (int, bool) {
 	return offset, true
 }
 
-// applyIndentOffset adds/removes spaces from each line.
+// applyIndentOffset adds/removes indentation from each line.
+// Detects whether to use tabs or spaces based on the content.
 func applyIndentOffset(lines []string, offset int) []string {
 	if offset == 0 {
 		return lines
+	}
+	// Detect indent char from the lines
+	indentChar := " "
+	for _, l := range lines {
+		if len(l) > 0 && l[0] == '\t' {
+			indentChar = "\t"
+			break
+		}
 	}
 	result := make([]string, len(lines))
 	for i, line := range lines {
@@ -148,13 +157,14 @@ func applyIndentOffset(lines []string, offset int) []string {
 			continue
 		}
 		if offset > 0 {
-			result[i] = strings.Repeat(" ", offset) + line
+			result[i] = strings.Repeat(indentChar, offset) + line
 		} else {
 			trim := -offset
-			if trim > len(line)-len(strings.TrimLeft(line, " ")) {
-				trim = len(line) - len(strings.TrimLeft(line, " "))
+			stripped := 0
+			for stripped < trim && stripped < len(line) && (line[stripped] == ' ' || line[stripped] == '\t') {
+				stripped++
 			}
-			result[i] = line[trim:]
+			result[i] = line[stripped:]
 		}
 	}
 	return result
