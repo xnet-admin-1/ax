@@ -87,16 +87,16 @@ func applyLightTheme() {
 		Foreground(tokyoComment)
 
 	panelStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(tokyoPurple).
 		Padding(1)
 
 	inputStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(tokyoGutter)
 
 	inputActiveStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(tokyoBlue)
 
 	helpBarStyle = lipgloss.NewStyle().
@@ -112,13 +112,13 @@ func applyLightTheme() {
 
 	// Bubble styles
 	userBubble = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(tokyoBlue).
 		Padding(0, 1).
 		MarginLeft(4)
 
 	assistantBubble = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(tokyoPurple).
 		Foreground(lipgloss.Color("#007700")).
 		Padding(0, 1)
@@ -235,15 +235,15 @@ func applyDarkTheme() {
 	agentResultStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#bb86fc")).Bold(true)
 	errorMsgStyle = lipgloss.NewStyle().Foreground(tokyoRed).Bold(true)
 	timestampStyle = lipgloss.NewStyle().Foreground(tokyoComment).Faint(true)
-	panelStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoPurple).Padding(1)
-	inputStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoGutter)
-	inputActiveStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoBlue)
+	panelStyle = lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(tokyoPurple).Padding(1)
+	inputStyle = lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(lipgloss.Color("#4a5280"))
+	inputActiveStyle = lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(lipgloss.Color("#89b4fa"))
 	helpBarStyle = lipgloss.NewStyle().Background(lipgloss.Color("#292e42")).Foreground(tokyoComment)
 	helpKeyStyle = lipgloss.NewStyle().Foreground(tokyoYellow).Bold(true)
 	helpDescStyle = lipgloss.NewStyle().Foreground(tokyoComment)
 
-	userBubble = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoBlue).Padding(0, 1).MarginLeft(4)
-	assistantBubble = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoPurple).Padding(0, 1)
+	userBubble = lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(tokyoBlue).Padding(0, 1).MarginLeft(4)
+	assistantBubble = lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(tokyoPurple).Padding(0, 1)
 	toolBubble = lipgloss.NewStyle().Border(lipgloss.HiddenBorder()).BorderForeground(tokyoGreen).BorderLeft(true).Padding(0, 1).Foreground(tokyoComment)
 	roleBadgeUser = lipgloss.NewStyle().Foreground(tokyoBg).Background(tokyoBlue).Bold(true).Padding(0, 1).MarginLeft(4)
 	roleBadgeAssistant = lipgloss.NewStyle().Foreground(tokyoBg).Background(tokyoPurple).Bold(true).Padding(0, 1)

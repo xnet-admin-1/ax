@@ -195,6 +195,9 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		m.updateViewport()
 		return m, m.readNextEvent()
 	case "progress":
+		if ev.ToolResult != "" {
+			m.activity = ev.ToolName + " " + formatProgress(ev.ToolResult)
+		}
 		return m, m.readNextEvent()
 	case "confirm":
 		m.confirmCmd = ev.ToolName
@@ -218,6 +221,7 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		m.streaming = false
 		m.activity = ""
 		m.tokens += ev.TotalTokens
+		m.input.ta.Placeholder = "Follow up or type / for commands..."
 		m.updateViewport()
 		// Auto-compact: if tokens exceed 75% of context window, compact
 		if m.tokens > 0 && len(m.msgs) > 8 {

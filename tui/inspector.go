@@ -112,7 +112,7 @@ func (ins *inspectorModel) view(width, height int) string {
 	content := titleStyle.Render(" "+ins.title) + "\n" + body + "\n" + footerStyle.Render(footer)
 
 	modal := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(tokyoPurple).
 		Width(modalW).
 		Height(modalH).

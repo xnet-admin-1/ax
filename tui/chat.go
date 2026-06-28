@@ -189,7 +189,7 @@ func renderAsTable(lines []string, width int) string {
 	t := table.New().
 		Headers(headers...).
 		Rows(rows...).
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#3b4261"))).
 		Width(width)
 
@@ -251,17 +251,17 @@ func wrapText(s string, width int) string {
 
 // filterToolMarkup removes raw tool call syntax that bleeds into display
 func filterToolMarkup(s string, width int) string {
-	// Render complete thought blocks as dimmed text, hard-wrap by char count
+	// Render complete thought blocks with dim styling
 	s = regexp.MustCompile("(?s)<thought>(.*?)</thought>").ReplaceAllStringFunc(s, func(m string) string {
 		inner := regexp.MustCompile("(?s)<thought>(.*?)</thought>").FindStringSubmatch(m)
 		if len(inner) < 2 { return "" }
-		return wrapThought(inner[1], width)
+		return renderThought(inner[1], width)
 	})
 	// Render incomplete thought block (still streaming)
 	s = regexp.MustCompile("(?s)<thought>(.*)$").ReplaceAllStringFunc(s, func(m string) string {
 		inner := regexp.MustCompile("(?s)<thought>(.*)$").FindStringSubmatch(m)
 		if len(inner) < 2 { return "" }
-		return wrapThought(inner[1], width)
+		return renderThought(inner[1], width)
 	})
 	result := s
 	for _, marker := range []string{"<|tool_call", "<|im_end", "<|assistant", "<|function_call"} {

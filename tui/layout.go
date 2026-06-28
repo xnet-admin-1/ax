@@ -149,6 +149,6 @@ func streamingBorder(tick int) lipgloss.Style {
 	colors := []lipgloss.Color{tokyoBlue, tokyoPurple, tokyoCyan}
 	c := colors[tick%len(colors)]
 	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(c)
 }

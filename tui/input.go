@@ -45,7 +45,7 @@ type inputModel struct {
 
 func newInput() inputModel {
 	ta := textarea.New()
-	ta.Placeholder = "Ask a question or describe a task ↵"
+	ta.Placeholder = "Describe a task or ask a question..."
 	ta.ShowLineNumbers = false
 	ta.SetHeight(3)
 	ta.CharLimit = 0
