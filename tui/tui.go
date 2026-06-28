@@ -718,13 +718,25 @@ func (m *model) statusBar() string {
 
 	left := fmt.Sprintf(" [%s] %s %s", modeInd, ind, title)
 	center := modelName
-	right := fmt.Sprintf("%dtok %s%s ", m.tokens, formatDuration(elapsed), agentStr)
+	tokStr := fmt.Sprintf("%d", m.tokens)
+	if m.tokens >= 1000000 {
+		tokStr = fmt.Sprintf("%.1fM", float64(m.tokens)/1000000)
+	} else if m.tokens >= 1000 {
+		tokStr = fmt.Sprintf("%.1fk", float64(m.tokens)/1000)
+	}
+	right := fmt.Sprintf("%stok %s%s ", tokStr, formatDuration(elapsed), agentStr)
 
 	leftW := len(left)
 	rightW := len(right)
 	centerW := len(center)
 	gap := w - leftW - rightW - centerW
-	if gap < 0 { gap = 0 }
+	if gap < 0 {
+		// Drop center if no room
+		center = ""
+		centerW = 0
+		gap = w - leftW - rightW
+		if gap < 0 { gap = 0 }
+	}
 	leftGap := gap / 2
 	rightGap := gap - leftGap
 
@@ -757,14 +769,8 @@ func (m *model) updateViewport() {
 	}
 	content := m.cachedRender
 	if m.streaming && m.streamBuf != "" {
-		display := filterToolMarkup(m.streamBuf)
-		if m.glamRenderer != nil {
-			if rendered, err := m.glamRenderer.Render(display); err == nil && strings.TrimSpace(rendered) != "" {
-				display = strings.TrimRight(rendered, "\n ")
-			}
-		} else if w > 10 {
-			display = wrapText(display, w-4)
-		}
+		display := filterToolMarkup(m.streamBuf, w)
+		display = wrapText(display, w-6)
 		bubbleW := w - 6
 		if bubbleW < 40 {
 			bubbleW = 40

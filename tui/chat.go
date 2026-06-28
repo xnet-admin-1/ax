@@ -33,7 +33,7 @@ func renderMessages(msgs []chatMsg, width int, showToolDetail bool, expanded map
 		case "assistant":
 			if m.content != "" {
 				var out string
-				cleaned := filterToolMarkup(m.content)
+				cleaned := filterToolMarkup(m.content, width)
 				if r != nil {
 					out, _ = r.Render(cleaned)
 					if strings.TrimSpace(out) == "" {
@@ -250,11 +250,19 @@ func wrapText(s string, width int) string {
 
 
 // filterToolMarkup removes raw tool call syntax that bleeds into display
-func filterToolMarkup(s string) string {
-	// Render complete thought blocks
-	s = regexp.MustCompile("(?s)<thought>(.*?)</thought>").ReplaceAllString(s, "\n> _thinking:_ $1\n")
+func filterToolMarkup(s string, width int) string {
+	// Render complete thought blocks as dimmed text, hard-wrap by char count
+	s = regexp.MustCompile("(?s)<thought>(.*?)</thought>").ReplaceAllStringFunc(s, func(m string) string {
+		inner := regexp.MustCompile("(?s)<thought>(.*?)</thought>").FindStringSubmatch(m)
+		if len(inner) < 2 { return "" }
+		return wrapThought(inner[1], width)
+	})
 	// Render incomplete thought block (still streaming)
-	s = regexp.MustCompile("(?s)<thought>(.*)$").ReplaceAllString(s, "\n> _thinking:_ $1")
+	s = regexp.MustCompile("(?s)<thought>(.*)$").ReplaceAllStringFunc(s, func(m string) string {
+		inner := regexp.MustCompile("(?s)<thought>(.*)$").FindStringSubmatch(m)
+		if len(inner) < 2 { return "" }
+		return wrapThought(inner[1], width)
+	})
 	result := s
 	for _, marker := range []string{"<|tool_call", "<|im_end", "<|assistant", "<|function_call"} {
 		for {
@@ -326,6 +334,39 @@ func wordWrap(text string, width int) string {
 		}
 	}
 	return strings.TrimRight(result.String(), "\n")
+}
+
+// wrapThought wraps thought content at word boundaries within width.
+// Breaks at existing newlines and at the last space before width limit.
+func wrapThought(s string, width int) string {
+	maxW := width - 4
+	if maxW < 40 {
+		maxW = 40
+	}
+	lines := strings.Split(s, "\n")
+	var out strings.Builder
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if l == "" {
+			continue
+		}
+		for len(l) > maxW {
+			// Find last space within maxW
+			cut := maxW
+			for i := maxW; i > maxW/2; i-- {
+				if l[i] == ' ' {
+					cut = i
+					break
+				}
+			}
+			out.WriteString("> " + l[:cut] + "\n")
+			l = strings.TrimSpace(l[cut:])
+		}
+		if l != "" {
+			out.WriteString("> " + l + "\n")
+		}
+	}
+	return out.String()
 }
 
 // looksLikeCode returns true if content appears to be source code or structured output

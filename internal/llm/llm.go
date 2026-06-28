@@ -157,6 +157,16 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 	switch name {
 	case "run_sh":
 		command := str(args, "command")
+		debug.D.Info("run_sh: %s", command)
+		timeout := 120 * time.Second
+		if t, ok := args["timeout"]; ok {
+			switch v := t.(type) {
+			case float64:
+				if v > 0 && v <= 600 {
+					timeout = time.Duration(v) * time.Second
+				}
+			}
+		}
 		if !ctx.TrustAll {
 			if dangerous, reason := IsDangerous(command); dangerous {
 				if ctx.ConfirmDangerous != nil {
@@ -166,7 +176,7 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 				}
 			}
 		}
-		c, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		c, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		cmd := exec.CommandContext(c, "bash", "-c", command)
 		if ctx.OnProgress != nil {

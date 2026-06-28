@@ -219,13 +219,7 @@ func formatDuration(d time.Duration) string {
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60
 	s := int(d.Seconds()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh%02dm", h, m)
-	}
-	if m > 0 {
-		return fmt.Sprintf("%dm%02ds", m, s)
-	}
-	return fmt.Sprintf("%ds", s)
+	return fmt.Sprintf("%d:%02d:%02d", h, m, s)
 }
 
 // ============================================================
@@ -296,15 +290,15 @@ func (m *model) helpBar() string {
 	case m.streaming:
 		keys = []string{helpKey("ctrl+c", "stop"), helpKey("enter", "interrupt")}
 	default:
-		keys = []string{helpKey("/", "cmd"), helpKey("ctl+n", "new"), helpKey("ctl+e", "editor"), helpKey("ctl+o", "tools"), helpKey("ctl+d/u", "scroll")}
+		keys = []string{helpKey("/", "cmd"), helpKey("shift+↑↓", "scroll"), helpKey("shift+←→", "history"), helpKey("ctrl+n", "new"), helpKey("ctrl+e", "editor")}
 	}
 
-	bar := strings.Join(keys, "  ")
 	w := m.width
 	if w < 20 {
 		w = 20
 	}
-	// Truncate keys to fit width
+	// Wrap keys to fit width - show as many as fit, drop from the end
+	bar := strings.Join(keys, "  ")
 	for lipgloss.Width(bar) > w-2 && len(keys) > 1 {
 		keys = keys[:len(keys)-1]
 		bar = strings.Join(keys, "  ")

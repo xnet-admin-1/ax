@@ -33,7 +33,7 @@ func (m *model) sendInput() (tea.Model, tea.Cmd) {
 	if m.streaming {
 		m.backend.Cancel(m.convID)
 		if m.streamBuf != "" {
-			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf) + " [interrupted]"})
+			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf, m.width) + " [interrupted]"})
 		}
 		m.streaming = false
 		m.streamBuf = ""
@@ -123,13 +123,14 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		if ev.Reasoning != "" {
 			if !m.inReasoning {
 				m.inReasoning = true
+				m.streamBuf += "<thought>"
 			}
 			m.streamBuf += ev.Reasoning
 		}
 		if ev.Delta != "" {
 			if m.inReasoning {
 				m.inReasoning = false
-				m.streamBuf += "\n\n---\n\n"
+				m.streamBuf += "</thought>\n\n"
 			}
 			m.streamBuf += ev.Delta
 		}
@@ -151,7 +152,7 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		// Set activity indicator based on tool name
 		// Flush streaming text before tool call so it persists in chat
 		if m.streamBuf != "" {
-			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf)})
+			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf, m.width)})
 			m.streamBuf = ""
 		}
 		toolBase := ev.ToolName
@@ -211,7 +212,7 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		return m, m.readNextEvent()
 	case "end":
 		if m.streamBuf != "" {
-			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf)})
+			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf, m.width)})
 			m.streamBuf = ""
 		}
 		m.streaming = false

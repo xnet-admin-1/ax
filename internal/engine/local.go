@@ -249,6 +249,14 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			return
 		}
 		messages = append(messages, Message{Role: "assistant", ToolCalls: toolCalls})
+		// Persist assistant tool-call message immediately for crash recovery
+		tcJSON, _ := json.Marshal(toolCalls)
+		assistantContent := content
+		if assistantContent == "" {
+			assistantContent = "[tool_calls]"
+		}
+		l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)",
+			convID, "assistant", assistantContent, string(tcJSON), time.Now().Unix())
 		for _, tc := range toolCalls {
 			ch <- Event{Type: "tool_call", ToolName: tc.Function.Name, ToolArgs: tc.Function.Arguments}
 			var args map[string]any
@@ -260,6 +268,11 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 				SearchProviderURL: "https://search.xnet.ngo",
 				OnProgress: func(name, chunk string) {
 					ch <- Event{Type: "progress", ToolName: name, ToolResult: chunk}
+				},
+				ConfirmDangerous: func(command, reason string) bool {
+					confirmCh := make(chan bool, 1)
+					ch <- Event{Type: "confirm", ToolName: command, ToolResult: reason, ConfirmCh: confirmCh}
+					return <-confirmCh
 				},
 			}
 			if l.AgentMgr == nil && l.DB != nil && l.Gateway != nil {

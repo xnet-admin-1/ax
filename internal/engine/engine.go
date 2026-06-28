@@ -85,6 +85,7 @@ var toolDefs = []map[string]any{
 				"required": []string{"command"},
 				"properties": map[string]any{
 					"command": map[string]string{"type": "string", "description": "Bash command to execute"},
+					"timeout": map[string]string{"type": "integer", "description": "Timeout in seconds (default 120, max 600). Use higher for long-running commands like git clone of large repos."},
 				},
 			},
 		},

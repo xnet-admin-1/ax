@@ -107,7 +107,7 @@ func renderBubbleMessages(msgs []chatMsg, width int, showToolDetail bool, expand
 				continue
 			}
 			b.WriteString(roleBadgeAssistant.Render(" AX ") + "\n")
-			cleaned := filterToolMarkup(m.content)
+			cleaned := filterToolMarkup(m.content, bubbleWidth)
 			var out string
 			if r != nil {
 				out, _ = r.Render(cleaned)
