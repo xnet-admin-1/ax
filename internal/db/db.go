@@ -30,10 +30,10 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	// Seed providers - try file override first, then embedded defaults
-	configPath := filepath.Join(os.Getenv("HOME"), "aiope-agentx", "gateway-config.json")
+	// Seed providers - try file override first, then example defaults
+	configPath := filepath.Join(os.Getenv("HOME"), ".ax", "gateway-config.json")
 	if err := SeedProviders(db, configPath); err != nil {
-		SeedFromEmbedded(db)
+		SeedExampleProviders(db)
 	}
 	return db, nil
 }
