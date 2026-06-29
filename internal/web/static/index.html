@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AX</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--surface:#111;--card:#1a1a1a;--border:#2a2a2a;--text:#fff;--text2:#9e9e9e;--primary:#7aa2f7;--green:#9ece6a;--red:#f7768e;--purple:#bb9af7}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden}
+.sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.sidebar-hdr{padding:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.sidebar-hdr h2{font-size:14px;color:var(--primary)}
+.new-btn{background:var(--primary);color:#000;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.conv-list{flex:1;overflow-y:auto;padding:8px}
+.conv-item{padding:8px 12px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.conv-item:hover{background:var(--card)}
+.conv-item.active{background:#283457;color:var(--primary)}
+.main{flex:1;display:flex;flex-direction:column}
+.main-hdr{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.main-hdr .title{font-size:14px;font-weight:600;color:var(--primary)}
+.model-sel{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px}
+.messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:80%;padding:10px 14px;font-size:14px;line-height:1.6;border-radius:10px;word-wrap:break-word}
+.msg-user{background:#1e3a5f;align-self:flex-end;border-radius:10px 10px 2px 10px}
+.msg-assistant{background:var(--surface);align-self:flex-start;border-radius:10px 10px 10px 2px}
+.msg-assistant pre{background:#000;border-radius:6px;padding:10px;overflow-x:auto;margin:8px 0;position:relative}
+.msg-assistant code{font-family:'JetBrains Mono',monospace;font-size:13px}
+.msg-assistant p{margin:4px 0}
+.tool-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;font-size:11px;font-family:monospace;border:1px solid var(--border);margin:4px 2px;color:var(--text2)}
+.tool-chip.running{border-color:var(--primary);color:var(--primary)}
+.tool-chip.done{border-color:var(--green);color:var(--green)}
+.tool-chip.error{border-color:var(--red);color:var(--red)}
+.reasoning{margin:4px 0;padding:6px 10px;border-left:2px solid var(--purple);font-size:12px;color:var(--text2);max-height:100px;overflow-y:auto}
+.input-area{border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px;align-items:flex-end}
+.input-area textarea{flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 14px;resize:none;font-size:14px;font-family:inherit;min-height:44px;max-height:160px}
+.input-area textarea:focus{border-color:var(--primary);outline:none}
+.send-btn{background:var(--primary);color:#000;border:none;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:16px;flex-shrink:0}
+.send-btn:disabled{opacity:.3}
+.send-btn.streaming{background:var(--red);color:#fff}
+.empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text2)}
+@media(max-width:768px){.sidebar{display:none}.msg{max-width:95%}}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="sidebar-hdr"><h2>AX</h2><button class="new-btn" onclick="newChat()">+ New</button></div>
+  <div class="conv-list" id="convList"></div>
+</div>
+<div class="main">
+  <div class="main-hdr">
+    <span class="title" id="title">AX</span>
+    <select class="model-sel" id="modelSel" onchange="setModel(this.value)"></select>
+  </div>
+  <div class="messages" id="messages"><div class="empty">Send a message to start</div></div>
+  <div class="input-area">
+    <textarea id="input" rows="1" placeholder="Message..." onkeydown="handleKey(event)" oninput="autoGrow(this)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="send()">&#9654;</button>
+  </div>
+</div>
+<script>
+let ws, convId='', streaming=false, streamEl=null, reasonEl=null;
+const msgs=document.getElementById('messages'), input=document.getElementById('input');
+
+function connect(){
+  ws=new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage=e=>{const d=JSON.parse(e.data);handle(d)};
+  ws.onclose=()=>setTimeout(connect,2000);
+}
+
+function handle(d){
+  switch(d.type){
+    case 'conversation.created':
+      convId=d.conversation.id;
+      loadConversations();
+      break;
+    case 'stream.start':
+      streamEl=addMsg('assistant','');
+      break;
+    case 'stream.delta':
+      if(streamEl)streamEl.innerHTML=marked.parse(streamEl.dataset.raw=(streamEl.dataset.raw||'')+d.delta);
+      break;
+    case 'stream.reasoning':
+      if(!reasonEl){reasonEl=document.createElement('div');reasonEl.className='reasoning';if(streamEl)streamEl.before(reasonEl)}
+      reasonEl.textContent+=d.delta;
+      break;
+    case 'stream.tool_call':
+      const chip=document.createElement('span');
+      chip.className='tool-chip running';chip.id='tc-'+d.toolCall.id;
+      chip.textContent=d.toolCall.name;
+      if(streamEl)streamEl.before(chip);
+      break;
+    case 'stream.tool_result':
+      const tc=document.getElementById('tc-'+d.toolCallId);
+      if(tc){tc.className='tool-chip '+(d.isError?'error':'done');tc.title=d.result}
+      break;
+    case 'stream.end':
+      streaming=false;streamEl=null;reasonEl=null;
+      document.getElementById('sendBtn').className='send-btn';
+      hljs.highlightAll();
+      break;
+    case 'stream.error':
+      addMsg('system',d.error);streaming=false;streamEl=null;
+      document.getElementById('sendBtn').className='send-btn';
+      break;
+  }
+  msgs.scrollTop=msgs.scrollHeight;
+}
+
+function addMsg(role,content){
+  document.querySelector('.empty')?.remove();
+  const div=document.createElement('div');
+  div.className='msg msg-'+role;
+  div.innerHTML=role==='user'?escHtml(content):marked.parse(content);
+  if(role!=='user')div.dataset.raw=content;
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  return div;
+}
+
+function send(){
+  if(streaming){ws.send(JSON.stringify({type:'chat.cancel',conversationId:convId}));return}
+  const text=input.value.trim();if(!text)return;
+  addMsg('user',text);
+  ws.send(JSON.stringify({type:'chat.send',conversationId:convId,content:text,mode:'chat'}));
+  input.value='';input.style.height='44px';
+  streaming=true;
+  document.getElementById('sendBtn').className='send-btn streaming';
+}
+
+function newChat(){convId='';msgs.innerHTML='<div class="empty">Send a message to start</div>';document.getElementById('title').textContent='AX'}
+
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}
+function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,160)+'px'}
+function escHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+async function loadConversations(){
+  const r=await fetch('/api/conversations');const data=await r.json();
+  const list=document.getElementById('convList');
+  list.innerHTML=data.map(c=>`<div class="conv-item${c.id===convId?' active':''}" onclick="loadConv('${c.id}')">${c.title||'Untitled'}</div>`).join('');
+}
+
+async function loadConv(id){
+  convId=id;
+  const r=await fetch(`/api/conversations/${id}/messages`);const data=await r.json();
+  msgs.innerHTML='';
+  data.forEach(m=>{if(m.role==='user'||m.role==='assistant')addMsg(m.role,m.content)});
+  loadConversations();
+}
+
+async function loadModels(){
+  const r=await fetch('/api/models');const data=await r.json();
+  const sel=document.getElementById('modelSel');
+  sel.innerHTML=data.map(m=>`<option value="${m}">${m.split('/').pop()}</option>`).join('');
+}
+
+function setModel(m){fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:m})})}
+
+connect();loadConversations();loadModels();
+</script>
+</body>
+</html>

@@ -136,7 +136,3 @@ func runTUI(f cliFlags) {
 		os.Exit(1)
 	}
 }
-
-func runServe() {
-	fmt.Println("ax serve — not yet implemented")
-}
