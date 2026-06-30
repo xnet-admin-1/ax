@@ -422,6 +422,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.providerList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
 		m.providerList.SetShowHelp(false)
 		m.providerList.SetShowTitle(false)
+		m.providerList.SetFilteringEnabled(false)
 		return m, nil
 	case spawnLoadedMsg:
 		items := []list.Item(msg)

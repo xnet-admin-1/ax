@@ -104,6 +104,17 @@ func (m *model) handleProviderAddSave() tea.Cmd {
 		Enabled: true,
 	}
 	svc.Save(p)
+
+	// Auto-discover models from the new provider
+	gw := gateway.NewRouter(db)
+	if models, err := gw.DiscoverModels(p.Name); err == nil && len(models) > 0 {
+		p.Models = models
+		svc.Save(p)
+		m.addSystemMsg(fmt.Sprintf("Provider %s: discovered %d models", p.Name, len(models)))
+	} else if err != nil {
+		m.addSystemMsg(fmt.Sprintf("Provider %s saved (model discovery failed: %v)", p.Name, err))
+	}
+
 	return m.loadProviderPanelFixed()
 }
 
@@ -863,12 +874,42 @@ func (m *model) compactContext() tea.Cmd {
 
 func (m *model) handleProviderEdit() tea.Cmd {
 	if item, ok := m.providerList.SelectedItem().(providerItem); ok && item.name != "(empty)" {
-		// Start edit mode - reuse provAdd fields
-		m.provAddLabel = item.name
-		m.provAddKey = ""
-		m.provAddBase = ""
-		m.provAddStep = 1 // key step
-		m.addSystemMsg("Editing " + item.name + " - enter new API key (or leave empty to keep current)")
+		db := m.backend.GetDB()
+		if db == nil { return nil }
+		svc := &provider.Service{DB: db}
+		p, _ := svc.Get(item.name)
+		if p == nil { return nil }
+		// Start edit mode with current values pre-filled
+		m.provAddLabel = p.Name
+		m.provAddBase = p.APIBase
+		m.provAddKey = p.APIKey
+		m.provAddStep = 2 // start at URL step (name is fixed)
+		m.provInput = p.APIBase
 	}
 	return nil
+}
+
+func (m *model) handleProviderRefresh() tea.Cmd {
+	item, ok := m.providerList.SelectedItem().(providerItem)
+	if !ok || item.name == "(none)" {
+		return nil
+	}
+	db := m.backend.GetDB()
+	if db == nil {
+		return nil
+	}
+	gw := gateway.NewRouter(db)
+	models, err := gw.DiscoverModels(item.name)
+	if err != nil {
+		m.addSystemMsg(fmt.Sprintf("Refresh %s failed: %v", item.name, err))
+		return nil
+	}
+	svc := &provider.Service{DB: db}
+	p, _ := svc.Get(item.name)
+	if p != nil {
+		p.Models = models
+		svc.Save(p)
+	}
+	m.addSystemMsg(fmt.Sprintf("%s: %d models loaded", item.name, len(models)))
+	return m.loadProviderPanelFixed()
 }

@@ -77,7 +77,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(r.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	client := NewClient(s.Hub, conn, cancel)
 	s.Hub.Register(client)
 

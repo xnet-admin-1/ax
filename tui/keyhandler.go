@@ -275,10 +275,30 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.addSystemMsg("All chat copied to clipboard")
 		return m, nil
 	case "ctrl+v":
-		// Paste from clipboard into input
-		if text, err := clipboard.ReadAll(); err == nil && text != "" {
-			m.input.ta.InsertString(text)
+		// Paste from clipboard
+		text, err := clipboard.ReadAll()
+		if err != nil || text == "" {
+			return m, nil
 		}
+		// Paste into active panel input if in edit mode
+		if m.panel == panelProvider && m.provAddStep > 0 {
+			m.provInput += text
+			return m, nil
+		}
+		if m.panel == panelMemory && m.memEditStep > 0 {
+			m.memEditValue += text
+			return m, nil
+		}
+		if m.panel == panelRemote && m.remoteAddStep > 0 {
+			m.remoteInput += text
+			return m, nil
+		}
+		if m.panel == panelSpawn && m.spawnTaskInput {
+			m.spawnTaskBuf += text
+			return m, nil
+		}
+		// Default: paste into main input
+		m.input.ta.InsertString(text)
 		return m, nil
 	case "ctrl+k":
 		m.palette.toggle()
@@ -404,6 +424,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.panel == panelUsage { m.tokens = 0; return m, nil }
 		if m.panel == panelVectors { return m, m.vectorsReindex() }
 		if m.panel == panelAgents { if h, c := m.handleAgentsKeyStr("r"); h { return m, c } }
+		if m.panel == panelProvider { return m, m.handleProviderRefresh() }
 	case "k":
 		if m.panel == panelAgents { if h, c := m.handleAgentsKeyStr("k"); h { return m, c } }
 	case "l":

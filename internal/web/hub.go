@@ -103,11 +103,12 @@ func (c *Client) ReadPump(ctx context.Context, handler func(*Client, []byte)) {
 		c.hub.Unregister(c)
 		c.conn.CloseNow()
 	}()
+	c.conn.SetReadLimit(1024 * 1024) // 1MB max message
 	for {
 		_, data, err := c.conn.Read(ctx)
 		if err != nil {
-			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
-				log.Printf("ws: client disconnected normally")
+			if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+				log.Printf("ws: read error: %v", err)
 			}
 			return
 		}

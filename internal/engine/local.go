@@ -156,7 +156,7 @@ func (l *Local) GetMessages(convID string) ([]Message, error) {
 		var m Message
 		var toolID sql.NullString
 		rows.Scan(&m.Role, &m.Content, &toolID)
-		if toolID.Valid && toolID.String != "" {
+		if toolID.Valid && toolID.String != "" && m.Role == "tool" {
 			parts := strings.SplitN(toolID.String, "|", 2)
 			if len(parts) == 2 {
 				m.Name = parts[0]
@@ -251,14 +251,13 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 		messages = append(messages, Message{Role: "assistant", ToolCalls: toolCalls})
 		// Persist assistant tool-call message immediately for crash recovery
 		tcJSON, _ := json.Marshal(toolCalls)
-		assistantContent := content
-		if assistantContent == "" {
-			assistantContent = "[tool_calls]"
+		// Only persist assistant message if it has real content
+		if content != "" {
+			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)",
+				convID, "assistant", content, string(tcJSON), time.Now().Unix())
 		}
-		l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)",
-			convID, "assistant", assistantContent, string(tcJSON), time.Now().Unix())
 		for _, tc := range toolCalls {
-			ch <- Event{Type: "tool_call", ToolName: tc.Function.Name, ToolArgs: tc.Function.Arguments}
+			ch <- Event{Type: "tool_call", Tool: tc.ID, ToolName: tc.Function.Name, ToolArgs: tc.Function.Arguments}
 			var args map[string]any
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
 			toolCtx := &llm.ToolContext{
@@ -329,7 +328,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			if err != nil {
 				result = "error: " + err.Error()
 			}
-			ch <- Event{Type: "tool_result", ToolName: tc.Function.Name, ToolResult: result}
+			ch <- Event{Type: "tool_result", Tool: tc.ID, ToolName: tc.Function.Name, ToolResult: result}
 			messages = append(messages, Message{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", result, tc.Function.Name+"|"+tc.ID, time.Now().Unix())
 		}
@@ -356,7 +355,7 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 		if len(m.ToolCalls) > 0 {
 			msg["tool_calls"] = m.ToolCalls
 		}
-		if m.ToolCallID != "" {
+		if m.ToolCallID != "" && m.Role == "tool" {
 			msg["tool_call_id"] = m.ToolCallID
 			if m.Name != "" {
 				msg["name"] = m.Name

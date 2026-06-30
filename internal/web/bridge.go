@@ -30,16 +30,16 @@ func BridgeEvents(ch <-chan engine.Event, client *Client, convID string) {
 				ToolCall: ToolCallDTO{
 					ID:        ev.Tool,
 					Name:      ev.ToolName,
-					Arguments: ev.Args,
+					Arguments: ev.ToolArgs,
 				},
 			})
 		case "tool_result":
-			isErr := len(ev.Result) > 6 && ev.Result[:6] == "error:"
+			isErr := len(ev.ToolResult) > 6 && ev.ToolResult[:6] == "error:"
 			client.Send(StreamToolResultMsg{
 				Type:           MsgStreamResult,
 				ConversationID: convID,
 				ToolCallID:     ev.Tool,
-				Result:         ev.Result,
+				Result:         ev.ToolResult,
 				IsError:        isErr,
 			})
 		case "end":
@@ -48,6 +48,11 @@ func BridgeEvents(ch <-chan engine.Event, client *Client, convID string) {
 				ConversationID: convID,
 				Usage:          UsageDTO{TotalTokens: ev.TotalTokens},
 			})
+		case "confirm":
+			// Auto-approve in web mode (no confirm UI yet)
+			if ev.ConfirmCh != nil {
+				ev.ConfirmCh <- true
+			}
 		case "error":
 			client.Send(StreamErrorMsg{
 				Type:           MsgStreamError,

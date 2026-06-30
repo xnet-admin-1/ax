@@ -8,6 +8,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/atotto/clipboard"
 	"os"
 	"strings"
 
@@ -827,11 +828,14 @@ func (m *model) providerPanelView() string {
 		}
 		return b.String()
 	}
-	return "Providers  a=add  enter=toggle  d=delete  esc=close\n\n" + m.providerList.View()
+	return "Providers  a=add  e=edit  r=refresh  enter=toggle  d=delete  esc=close\n\n" + m.providerList.View()
 }
 
 func (m *model) handleProviderAddKey(key string) (bool, tea.Cmd) {
 	switch key {
+	case "ctrl+v":
+		if text, err := clipboard.ReadAll(); err == nil && text != "" { m.provInput += text }
+		return true, nil
 	case "enter":
 		switch m.provAddStep {
 		case 1:
@@ -854,25 +858,22 @@ func (m *model) handleProviderAddKey(key string) (bool, tea.Cmd) {
 		if m.provAddStep > 1 {
 			m.provAddStep--
 			switch m.provAddStep {
-			case 1:
-				m.provInput = m.provAddLabel
-			case 2:
-				m.provInput = m.provAddBase
+			case 1: m.provInput = m.provAddLabel
+			case 2: m.provInput = m.provAddBase
 			}
 		} else {
 			m.provAddStep = 0
 		}
 		return true, nil
 	case "backspace":
-		if len(m.provInput) > 0 {
-			m.provInput = m.provInput[:len(m.provInput)-1]
-		}
+		if len(m.provInput) > 0 { m.provInput = m.provInput[:len(m.provInput)-1] }
 		return true, nil
 	default:
 		if len(key) == 1 {
 			m.provInput += key
+			return true, nil
 		}
-		return true, nil
+		return false, nil
 	}
 }
 
