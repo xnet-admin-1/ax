@@ -22,7 +22,7 @@ var slashCommands = []string{
 	// Utility
 	"/attach", "/export", "/compact", "/usage",
 	// Mode
-	"/mode",
+	"/mode", "/theme",
 	// Meta
 	"/help", "/exit",
 }

@@ -5,11 +5,112 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 // ============================================================
-// Tokyo Night Color Palette (consistent across all elements)
+// Theme System
+// ============================================================
+
+type colorPalette struct {
+	Bg, Fg, Comment, Selection           lipgloss.Color
+	Cyan, Blue, Purple, Green            lipgloss.Color
+	Orange, Red, Yellow, Dark, Gutter    lipgloss.Color
+}
+
+var themes = map[string]colorPalette{
+	"system": {
+		Bg: "#1a1b26", Fg: "#c0caf5", Comment: "#565f89", Selection: "#283457",
+		Cyan: "#7dcfff", Blue: "#7aa2f7", Purple: "#bb9af7", Green: "#9ece6a",
+		Orange: "#ff9e64", Red: "#f7768e", Yellow: "#e0af68", Dark: "#1f2335", Gutter: "#3b4261",
+	},
+	"high-contrast-dark": {
+		Bg: "#000000", Fg: "#ffffff", Comment: "#888888", Selection: "#444444",
+		Cyan: "#00ffff", Blue: "#5c9aff", Purple: "#d19aff", Green: "#00ff88",
+		Orange: "#ffaa00", Red: "#ff4444", Yellow: "#ffff00", Dark: "#0a0a0a", Gutter: "#555555",
+	},
+	"high-contrast-light": {
+		Bg: "#ffffff", Fg: "#000000", Comment: "#555555", Selection: "#ccddff",
+		Cyan: "#007080", Blue: "#0033cc", Purple: "#7700aa", Green: "#006600",
+		Orange: "#cc5500", Red: "#cc0000", Yellow: "#887700", Dark: "#f0f0f0", Gutter: "#aaaaaa",
+	},
+}
+
+var currentTheme = "system"
+
+func applyTheme(name string) {
+	p, ok := themes[name]
+	if !ok {
+		p = themes["system"]
+		name = "system"
+	}
+	currentTheme = name
+	tokyoBg = p.Bg; tokyoFg = p.Fg; tokyoComment = p.Comment; tokyoSelection = p.Selection
+	tokyoCyan = p.Cyan; tokyoBlue = p.Blue; tokyoPurple = p.Purple; tokyoGreen = p.Green
+	tokyoOrange = p.Orange; tokyoRed = p.Red; tokyoYellow = p.Yellow; tokyoDark = p.Dark; tokyoGutter = p.Gutter
+	rebuildStyles()
+}
+
+func rebuildStyles() {
+	statusBarStyle = lipgloss.NewStyle().Background(lipgloss.Color("#292e42")).Foreground(tokyoFg).Bold(true)
+	statusModelStyle = lipgloss.NewStyle().Foreground(tokyoPurple).Bold(true)
+	statusTokenStyle = lipgloss.NewStyle().Foreground(tokyoGreen)
+	statusTimerStyle = lipgloss.NewStyle().Foreground(tokyoComment).Faint(true)
+	userMsgStyle = lipgloss.NewStyle().Foreground(tokyoBlue).Bold(true)
+	assistantGutter = lipgloss.NewStyle().Foreground(tokyoPurple).SetString("│ ")
+	toolCallStyle = lipgloss.NewStyle().Foreground(tokyoGreen).Faint(true)
+	agentResultStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#bb86fc")).Bold(true)
+	errorMsgStyle = lipgloss.NewStyle().Foreground(tokyoRed).Bold(true)
+	timestampStyle = lipgloss.NewStyle().Foreground(tokyoComment).Faint(true)
+	panelStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoPurple).Padding(1)
+	panelHintStyle = lipgloss.NewStyle().Foreground(tokyoComment).Faint(true)
+	inputStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoGutter)
+	inputActiveStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(tokyoBlue)
+	compMatchStyle = lipgloss.NewStyle().Foreground(tokyoCyan).Bold(true)
+	compNormalStyle = lipgloss.NewStyle().Foreground(tokyoFg)
+	compSelectedStyle = lipgloss.NewStyle().Background(tokyoSelection).Foreground(tokyoCyan).Bold(true)
+	helpBarStyle = lipgloss.NewStyle().Background(lipgloss.Color("#292e42")).Foreground(tokyoComment)
+	helpKeyStyle = lipgloss.NewStyle().Foreground(tokyoYellow).Bold(true)
+	helpDescStyle = lipgloss.NewStyle().Foreground(tokyoComment)
+	breadcrumbStyle = lipgloss.NewStyle().Foreground(tokyoComment).Faint(true)
+	breadcrumbActiveStyle = lipgloss.NewStyle().Foreground(tokyoCyan)
+	panelHeaderStyle = lipgloss.NewStyle().Foreground(tokyoCyan).Bold(true)
+	panelLabelStyle = lipgloss.NewStyle().Foreground(tokyoComment)
+	panelValueStyle = lipgloss.NewStyle().Foreground(tokyoFg)
+	panelCursorStyle = lipgloss.NewStyle().Foreground(tokyoGreen).Bold(true)
+	panelSelectedStyle = lipgloss.NewStyle().Foreground(tokyoCyan).Bold(true)
+	panelCheckStyle = lipgloss.NewStyle().Foreground(tokyoGreen)
+}
+
+var themeNames = []string{"system", "high-contrast-dark", "high-contrast-light"}
+
+func (m *model) themePanelView() string {
+	var b strings.Builder
+	b.WriteString(" Theme  [enter] select  [esc] close\n\n")
+	for i, name := range themeNames {
+		cursor := "  "
+		if i == m.themeIdx { cursor = "> " }
+		active := ""
+		if name == currentTheme { active = " (active)" }
+		b.WriteString("  " + cursor + name + active + "\n")
+	}
+	return b.String()
+}
+
+func (m *model) handleThemeEnter() tea.Cmd {
+	name := themeNames[m.themeIdx]
+	applyTheme(name)
+	if db := m.backend.GetDB(); db != nil {
+		db.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES('theme',?)", name)
+	}
+	m.panel = panelNone
+	m.addSystemMsg("Theme → " + name)
+	return nil
+}
+
+// ============================================================
+// Color Palette Variables
 // ============================================================
 
 var (
@@ -272,6 +373,8 @@ func (m *model) helpBar() string {
 		keys = []string{helpKey("enter", "toggle"), helpKey("a", "add"), helpKey("d", "delete"), helpKey("esc", "close")}
 	case m.panel == panelSettings:
 		keys = []string{helpKey("enter", "edit"), helpKey("esc", "close")}
+	case m.panel == panelTheme:
+		keys = []string{helpKey("enter", "select"), helpKey("esc", "close")}
 	case m.panel == panelConfig:
 		keys = []string{helpKey("enter", "edit"), helpKey("esc", "close")}
 	case m.panel == panelVectors:

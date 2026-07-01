@@ -77,6 +77,7 @@ type model struct {
 	editingValue   string
 	editingCursor  int
 	compactIdx     int
+	themeIdx       int
 	providerList   list.Model
 	memoryList     list.Model
 	remoteList     list.Model
@@ -209,6 +210,10 @@ func (m *model) Init() tea.Cmd {
 		if db.QueryRow("SELECT value FROM settings WHERE key='selected_model'").Scan(&model) == nil && model != "" {
 			m.backend.SetModel(model)
 		}
+		var theme string
+		if db.QueryRow("SELECT value FROM settings WHERE key='theme'").Scan(&theme) == nil && theme != "" {
+			applyTheme(theme)
+		}
 	}
 	cmds := []tea.Cmd{m.input.ta.Focus(), tea.EnableBracketedPaste, m.spinner.Tick, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })}
 	// Launch with agent handoff if specified
@@ -251,9 +256,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Filter out cursor position report responses (e.g. [1;1R)
 		s := msg.String()
-		if len(s) > 1 && s[len(s)-1] == 'R' && strings.ContainsAny(s, ";0123456789") {
+		// Filter SGR mouse sequences arriving as runes (e.g. [<65;89;32M)
+		if len(s) > 5 && s[0] == '[' && s[1] == '<' && (s[len(s)-1] == 'M' || s[len(s)-1] == 'm') {
+			return m, nil
+		}
+		if len(s) > 3 && s[0] == '<' && (s[len(s)-1] == 'M' || s[len(s)-1] == 'm') {
+			return m, nil
+		}
+		// Filter cursor position reports
+		if len(s) > 1 && s[len(s)-1] == 'R' && strings.ContainsAny(s, ";") {
 			return m, nil
 		}
 		return m.handleKey(msg)
@@ -271,17 +283,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
-		return m, m.spinner.Tick
+		return m, nil
 
 	case launchAgentMsg:
 		return m, m.handleHandoff(string(msg))
 
 	case renderTickMsg:
-		if m.streaming || m.panel == panelAgents {
+		if m.streaming {
 			m.updateViewport()
 			return m, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 		}
-		// Slow tick when idle (1s) for agent poll updates
+		// Slow tick when idle
 		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 
 	case progress.FrameMsg:
@@ -642,20 +654,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.ctrlCPressed = true
 		return m, nil
-	case "W":
-		if m.panel != panelNone {
-			m.panelVp.LineUp(1)
-		} else {
-			m.vp.LineUp(1)
-		}
-		return m, nil
-	case "S":
-		if m.panel != panelNone {
-			m.panelVp.LineDown(1)
-		} else {
-			m.vp.LineDown(1)
-		}
-		return m, nil
+
 	case "ctrl+d":
 		if m.panel != panelNone {
 			m.panelVp.HalfPageDown()
@@ -780,6 +779,9 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.panel == panelCompact {
 			return m, m.handleCompactEnter()
 		}
+		if m.panel == panelTheme {
+			return m, m.handleThemeEnter()
+		}
 		if m.panel == panelTree {			return m, m.handleTreeEnter()		}
 		if m.panel == panelProvider {
 			return m, m.handleProviderToggle()
@@ -811,6 +813,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.panel == panelConfig { m.configList, _ = m.configList.Update(msg); return m, nil }
 		if m.panel == panelTools { m.toolsList2, _ = m.toolsList2.Update(msg); return m, nil }
 		if m.panel == panelCompact { if m.compactIdx > 0 { m.compactIdx-- }; return m, nil }
+		if m.panel == panelTheme { if m.themeIdx > 0 { m.themeIdx-- }; return m, nil }
 		if m.panel == panelTree { if m.treeIdx > 0 { m.treeIdx-- }; return m, nil }
 		if m.panel == panelProvider { m.providerList, _ = m.providerList.Update(msg); return m, nil }
 		if m.panel == panelMemory { m.memoryList, _ = m.memoryList.Update(msg); return m, nil }
@@ -819,6 +822,10 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.panel == panelSpawn { m.spawnList, _ = m.spawnList.Update(msg); return m, nil }
 		if m.panel == panelAgentBuilder { m.agentBuilderList, _ = m.agentBuilderList.Update(msg); return m, nil }
 		if m.panel != panelNone { m.panelVp.LineUp(1); return m, nil }
+		if m.panel == panelNone && m.input.Value() == "" {
+			m.vp.ScrollUp(3)
+			return m, nil
+		}
 		if m.panel == panelNone && m.input.HistoryUp() {
 			return m, nil
 		}
@@ -901,6 +908,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.panel == panelConfig { m.configList, _ = m.configList.Update(msg); return m, nil }
 		if m.panel == panelTools { m.toolsList2, _ = m.toolsList2.Update(msg); return m, nil }
 		if m.panel == panelCompact { if m.compactIdx < 2 { m.compactIdx++ }; return m, nil }
+		if m.panel == panelTheme { if m.themeIdx < len(themeNames)-1 { m.themeIdx++ }; return m, nil }
 		if m.panel == panelTree { if m.treeIdx < len(m.treeItems)-1 { m.treeIdx++ }; return m, nil }
 		if m.panel == panelProvider { m.providerList, _ = m.providerList.Update(msg); return m, nil }
 		if m.panel == panelMemory { m.memoryList, _ = m.memoryList.Update(msg); return m, nil }
@@ -909,6 +917,10 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.panel == panelSpawn { m.spawnList, _ = m.spawnList.Update(msg); return m, nil }
 		if m.panel == panelAgentBuilder { m.agentBuilderList, _ = m.agentBuilderList.Update(msg); return m, nil }
 		if m.panel != panelNone { m.panelVp.LineDown(1); return m, nil }
+		if m.panel == panelNone && m.input.Value() == "" {
+			m.vp.ScrollDown(3)
+			return m, nil
+		}
 		if m.panel == panelNone && m.input.HistoryDown() {
 			return m, nil
 		}
@@ -1430,8 +1442,11 @@ func (m *model) updateViewport() {
 		}
 		content += sb.String()
 	}
+	wasAtBottom := m.vp.AtBottom()
 	m.vp.SetContent(content)
-	m.vp.GotoBottom()
+	if wasAtBottom {
+		m.vp.GotoBottom()
+	}
 }
 
 func (m *model) addSystemMsg(text string) {

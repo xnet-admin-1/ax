@@ -42,6 +42,7 @@ var allCommands = []paletteItem{
 	{"/status", "System status"},
 	{"/fork", "Fork conversation"},
 	{"/spawn", "Spawn agent task"},
+	{"/theme", "Switch color theme"},
 	{"/exit", "Exit application"},
 }
 

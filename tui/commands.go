@@ -29,6 +29,7 @@ const (
 	panelSpawn
 	panelAgentBuilder
 	panelTree
+	panelTheme
 )
 
 func (m *model) handleCommand(input string) tea.Cmd {
@@ -189,6 +190,8 @@ func (m *model) handleCommand(input string) tea.Cmd {
 			}
 		}
 		m.addSystemMsg("Mode: " + m.mode)
+	case "/theme":
+		m.panel = panelTheme
 	case "/exit":
 		return tea.Quit
 }
@@ -232,6 +235,8 @@ func (m *model) panelView(width int) string {
 		return "Knowledge Base\n\nUse /knowledge <query> to search"
 	case panelTree:
 		return m.treePanelView()
+	case panelTheme:
+		return m.themePanelView()
 	}
 	return ""
 }
@@ -285,6 +290,7 @@ const helpText = `Commands:
   /chain       Chain agents sequentially (output→input)
   /spawn       Spawn agent(s) - comma-separate for parallel
   /mode        Cycle mode (chat/plan/build)
+  /theme       Switch theme (system/high-contrast-dark/high-contrast-light)
   /todos       List todo items
   /exit        Exit
 
