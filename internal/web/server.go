@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	crand "crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,7 @@ type Server struct {
 	Password string
 	Port     int
 	Bind     string
+	Token    string // active session token
 
 	// Active streaming sessions (convID → cancel func)
 	mu       sync.Mutex
@@ -50,12 +52,34 @@ func NewServer(db *sql.DB, gw *gateway.Router, webFS fs.FS, bind string, port in
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	// API routes
-	mux.HandleFunc("GET /api/conversations", s.Handlers.ListConversations)
-	mux.HandleFunc("GET /api/conversations/{id}/messages", s.Handlers.GetMessages)
-	mux.HandleFunc("DELETE /api/conversations/{id}", s.Handlers.DeleteConversation)
-	mux.HandleFunc("GET /api/models", s.Handlers.ListModels)
-	mux.HandleFunc("POST /api/model", s.Handlers.SetModel)
+	// Generate session token
+	if s.Password != "" {
+		b := make([]byte, 32)
+		crand.Read(b)
+		s.Token = fmt.Sprintf("%x", b)
+	}
+
+	// Login endpoint (no auth required)
+	mux.HandleFunc("POST /api/login", s.handleLogin)
+
+	// API routes (auth required)
+	mux.HandleFunc("GET /api/conversations", s.requireAuth(s.Handlers.ListConversations))
+	mux.HandleFunc("GET /api/conversations/{id}/messages", s.requireAuth(s.Handlers.GetMessages))
+	mux.HandleFunc("DELETE /api/conversations/{id}", s.requireAuth(s.Handlers.DeleteConversation))
+	mux.HandleFunc("PUT /api/conversations/{id}", s.requireAuth(s.Handlers.RenameConversation))
+	mux.HandleFunc("GET /api/models", s.requireAuth(s.Handlers.ListModels))
+	mux.HandleFunc("POST /api/model", s.requireAuth(s.Handlers.SetModel))
+	mux.HandleFunc("GET /api/settings", s.requireAuth(s.Handlers.ListSettings))
+	mux.HandleFunc("POST /api/settings", s.requireAuth(s.Handlers.UpdateSetting))
+	mux.HandleFunc("DELETE /api/settings", s.requireAuth(s.Handlers.DeleteSetting))
+	mux.HandleFunc("GET /api/providers", s.requireAuth(s.Handlers.ListProviders))
+	mux.HandleFunc("POST /api/providers", s.requireAuth(s.Handlers.AddProvider))
+	mux.HandleFunc("PUT /api/providers/{name}", s.requireAuth(s.Handlers.EditProvider))
+	mux.HandleFunc("DELETE /api/providers/{name}", s.requireAuth(s.Handlers.DeleteProvider))
+	mux.HandleFunc("POST /api/providers/{name}/toggle", s.requireAuth(s.Handlers.ToggleProvider))
+	mux.HandleFunc("POST /api/providers/{name}/discover", s.requireAuth(s.Handlers.DiscoverModels))
+	mux.HandleFunc("GET /api/tools", s.requireAuth(s.Handlers.ListTools))
+	mux.HandleFunc("PUT /api/tools/{name}", s.requireAuth(s.Handlers.ToggleTool))
 
 	// WebSocket
 	mux.HandleFunc("/ws", s.handleWS)
@@ -66,6 +90,47 @@ func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%d", s.Bind, s.Port)
 	log.Printf("ax serve: listening on http://%s", addr)
 	return http.ListenAndServe(addr, mux)
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if s.Password == "" {
+		// No password set, return token directly
+		json.NewEncoder(w).Encode(map[string]string{"token": "open"})
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(body.Password), []byte(s.Password)) != 1 {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"token": s.Token})
+}
+
+func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.Password == "" {
+			next(w, r)
+			return
+		}
+		token := r.Header.Get("Authorization")
+		if len(token) > 7 && token[:7] == "Bearer " {
+			token = token[7:]
+		}
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
+		if token != s.Token {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {

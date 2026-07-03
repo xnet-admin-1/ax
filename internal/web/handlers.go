@@ -96,3 +96,205 @@ func (h *Handlers) DeleteConversation(w http.ResponseWriter, r *http.Request) {
 	h.DB.Exec("DELETE FROM conversations WHERE id=?", convID)
 	w.WriteHeader(200)
 }
+
+// RenameConversation updates a conversation title
+func (h *Handlers) RenameConversation(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
+	if convID == "" {
+		http.Error(w, "missing id", 400)
+		return
+	}
+	var body struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	h.DB.Exec("UPDATE conversations SET title=? WHERE id=?", body.Title, convID)
+	w.WriteHeader(200)
+}
+
+// ListSettings returns all settings
+func (h *Handlers) ListSettings(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.DB.Query("SELECT key, value FROM settings ORDER BY key")
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rows.Close()
+	settings := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		rows.Scan(&k, &v)
+		settings[k] = v
+	}
+	json.NewEncoder(w).Encode(settings)
+}
+
+// UpdateSetting sets a single setting
+func (h *Handlers) UpdateSetting(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Key == "" {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	h.DB.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", body.Key, body.Value)
+	w.WriteHeader(200)
+}
+
+// DeleteSetting removes a setting
+func (h *Handlers) DeleteSetting(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		http.Error(w, "missing key", 400)
+		return
+	}
+	h.DB.Exec("DELETE FROM settings WHERE key=?", key)
+	w.WriteHeader(200)
+}
+
+// ListProviders returns all providers
+func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.DB.Query("SELECT name, api_key, api_base, enabled, models FROM providers ORDER BY name")
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rows.Close()
+	type provDTO struct {
+		Name    string   `json:"name"`
+		APIBase string   `json:"apiBase"`
+		HasKey  bool     `json:"hasKey"`
+		Enabled bool     `json:"enabled"`
+		Models  []string `json:"models"`
+	}
+	var out []provDTO
+	for rows.Next() {
+		var name, key, base, models string
+		var enabled int
+		rows.Scan(&name, &key, &base, &enabled, &models)
+		p := provDTO{Name: name, APIBase: base, HasKey: key != "", Enabled: enabled != 0}
+		json.Unmarshal([]byte(models), &p.Models)
+		out = append(out, p)
+	}
+	if out == nil {
+		out = []provDTO{}
+	}
+	json.NewEncoder(w).Encode(out)
+}
+
+// AddProvider creates or updates a provider
+func (h *Handlers) AddProvider(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name    string `json:"name"`
+		APIBase string `json:"apiBase"`
+		APIKey  string `json:"apiKey"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	h.DB.Exec("INSERT OR REPLACE INTO providers(name, api_key, api_base, enabled, models) VALUES(?,?,?,1,COALESCE((SELECT models FROM providers WHERE name=?), '[]'))",
+		body.Name, body.APIKey, body.APIBase, body.Name)
+	w.WriteHeader(200)
+}
+
+// EditProvider updates a provider's key and base
+func (h *Handlers) EditProvider(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	var body struct {
+		APIBase string `json:"apiBase"`
+		APIKey  string `json:"apiKey"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	h.DB.Exec("UPDATE providers SET api_base=?, api_key=? WHERE name=?", body.APIBase, body.APIKey, name)
+	w.WriteHeader(200)
+}
+
+// DeleteProvider removes a provider
+func (h *Handlers) DeleteProvider(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	h.DB.Exec("DELETE FROM providers WHERE name=?", name)
+	w.WriteHeader(200)
+}
+
+// ToggleProvider enables/disables a provider
+func (h *Handlers) ToggleProvider(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	h.DB.Exec("UPDATE providers SET enabled = CASE WHEN enabled=1 THEN 0 ELSE 1 END WHERE name=?", name)
+	w.WriteHeader(200)
+}
+
+// DiscoverModels fetches models from a provider's /models endpoint
+func (h *Handlers) DiscoverModels(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	models, err := h.Gateway.DiscoverModels(name)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	// Save to DB
+	modelsJSON, _ := json.Marshal(models)
+	h.DB.Exec("UPDATE providers SET models=? WHERE name=?", string(modelsJSON), name)
+	json.NewEncoder(w).Encode(models)
+}
+
+// ListTools returns all available tools with their trust status
+func (h *Handlers) ListTools(w http.ResponseWriter, r *http.Request) {
+	type toolDTO struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Source      string `json:"source"`
+		Trusted     bool   `json:"trusted"`
+	}
+
+	// Get builtin tools from gateway's toolDefs
+	builtinTools := []struct{ name, desc string }{
+		{"run_sh", "Execute shell commands"},
+		{"read_file", "Read file contents"},
+		{"write_file", "Write/create files"},
+		{"edit_file", "SEARCH/REPLACE editing"},
+		{"list_dir", "List directory contents"},
+		{"search_web", "Web search via SearXNG"},
+		{"orchestrate", "Multi-agent pipeline"},
+		{"save_memory", "Persist key-value memory"},
+		{"recall_memory", "Retrieve stored memory"},
+		{"delete_memory", "Remove memory"},
+	}
+
+	var tools []toolDTO
+	for _, t := range builtinTools {
+		trusted := true
+		var val string
+		if h.DB.QueryRow("SELECT value FROM settings WHERE key=?", "tool_trust_"+t.name).Scan(&val) == nil {
+			trusted = val != "0"
+		}
+		tools = append(tools, toolDTO{Name: t.name, Description: t.desc, Source: "builtin", Trusted: trusted})
+	}
+	json.NewEncoder(w).Encode(tools)
+}
+
+// ToggleTool toggles trust for a tool
+func (h *Handlers) ToggleTool(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	var body struct {
+		Trusted bool `json:"trusted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	val := "0"
+	if body.Trusted {
+		val = "1"
+	}
+	h.DB.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", "tool_trust_"+name, val)
+	w.WriteHeader(200)
+}

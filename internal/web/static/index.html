@@ -31,6 +31,9 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
 .msg-user{background:#1e3a5f;border-radius:10px 10px 2px 10px}
 .msg-assistant{background:var(--surface);border-radius:10px 10px 10px 2px}
 .msg-assistant pre{background:#000;border-radius:6px;padding:10px;overflow-x:auto;margin:8px 0;position:relative}
+.msg-assistant pre .copy-btn{position:absolute;top:6px;right:6px;background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;opacity:0;transition:opacity .15s}
+.msg-assistant pre:hover .copy-btn{opacity:1}
+.msg-assistant pre .copy-btn:hover{color:var(--text)}
 .msg-assistant code{font-family:'JetBrains Mono',monospace;font-size:13px}
 .msg-assistant p{margin:4px 0}
 .msg-actions{display:flex;gap:4px;flex-wrap:wrap}
@@ -49,9 +52,7 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
 .reasoning .reasoning-text{padding:4px 12px 10px;font-size:13px;color:var(--text2);line-height:1.5;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-wrap:break-word}
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 .reasoning.active summary::after{content:'';display:inline-block;width:40px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--border),var(--primary),var(--border));background-size:200% 100%;animation:shimmer 1.5s infinite}
-.input-area{border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px;align-items:flex-end}
-.input-area textarea{flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 14px;resize:none;font-size:14px;font-family:inherit;min-height:44px;max-height:160px}
-.input-area textarea:focus{border-color:var(--primary);outline:none}
+.input-area{border-top:1px solid var(--border);padding:12px 16px}
 .send-btn{background:var(--primary);color:#000;border:none;border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:16px;flex-shrink:0}
 .send-btn:disabled{opacity:.3}
 .send-btn.streaming{background:var(--red);color:#fff}
@@ -61,7 +62,41 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
 .edit-btns button{padding:4px 12px;border-radius:6px;border:none;font-size:12px;cursor:pointer}
 .edit-btns .save{background:var(--primary);color:#000}
 .edit-btns .cancel{background:var(--card);color:var(--text2);border:1px solid var(--border)}
-@media(max-width:768px){.sidebar{display:none}.msg-wrap{max-width:95%}}
+.mode-pills{display:flex;gap:4px;margin-bottom:8px}
+.mode-pill{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--text2);border:1px solid var(--border)}
+.mode-pill.active{background:#283457;color:var(--primary);border-color:var(--primary)}
+.input-row{display:flex;gap:8px;align-items:flex-end}
+.input-row textarea{flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 14px;resize:none;font-size:14px;font-family:inherit;min-height:44px;max-height:160px}
+.input-row textarea:focus{border-color:var(--primary);outline:none}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+.modal-hdr{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-hdr h3{font-size:15px;color:var(--primary)}
+.modal-tabs{display:flex;border-bottom:1px solid var(--border);flex-wrap:wrap;background:var(--card)}
+.modal-tab{padding:8px 12px;font-size:12px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;white-space:nowrap}
+.modal-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.modal-tab:hover{color:var(--text)}
+.modal-close{background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer}
+.modal-body{flex:1;overflow-y:auto;padding:16px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+.field input{width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px}
+.field input:focus{border-color:var(--primary);outline:none}
+.btn-primary{background:var(--primary);color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px}
+[data-theme="light"]{--bg:#fafafa;--surface:#fff;--card:#f5f5f5;--border:#e0e0e0;--text:#1a1a1a;--text2:#666;--primary:#0068a8;--green:#326e00;--red:#c02040;--purple:#7520a0}
+.login-wrap{display:flex;align-items:center;justify-content:center;height:100vh;width:100%}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:320px}
+.login-box h2{font-size:1.2rem;color:var(--primary);text-align:center;margin-bottom:1rem}
+.login-box input{width:100%;padding:.75rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;margin-bottom:1rem}
+.login-box button{width:100%;padding:.75rem;border:none;border-radius:8px;background:var(--primary);color:#fff;font-size:1rem;cursor:pointer}
+.login-err{color:var(--red);font-size:.85rem;margin-bottom:.5rem;display:none}
+@media(max-width:768px){
+  .sidebar{position:fixed;left:-260px;top:0;bottom:0;z-index:100;transition:left .2s;width:260px}
+  .sidebar.open{left:0}
+  .msg-wrap{max-width:95%}
+  .menu-btn{display:block!important}
+}
 </style>
 </head>
 <body>
@@ -71,13 +106,30 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
 </div>
 <div class="main">
   <div class="main-hdr">
-    <span class="title" id="title">AX</span>
+    <span class="title" id="title"><button class="msg-act menu-btn" onclick="toggleSidebar()" style="display:none;margin-right:8px;font-size:16px;padding:4px 8px">☰</button>AX</span>
     <select class="model-sel" id="modelSel" onchange="setModel(this.value)"></select>
+    <button class="msg-act" onclick="toggleTheme()" title="Toggle theme">◐</button>
+    <button class="msg-act" onclick="openSettings()" title="Settings">⚙</button>
   </div>
   <div class="messages" id="messages"><div class="empty">Send a message to start</div></div>
   <div class="input-area">
-    <textarea id="input" rows="1" placeholder="Message..." onkeydown="handleKey(event)" oninput="autoGrow(this)"></textarea>
-    <button class="send-btn" id="sendBtn" onclick="send()">&#9654;</button>
+    <div class="mode-pills"><span class="mode-pill active" onclick="setMode('chat',this)">CHAT</span><span class="mode-pill" onclick="setMode('plan',this)">PLAN</span><span class="mode-pill" onclick="setMode('build',this)">BUILD</span></div>
+    <div class="input-row">
+      <textarea id="input" rows="1" placeholder="Message..." onkeydown="handleKey(event)" oninput="autoGrow(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="send()">&#9654;</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <div class="modal-hdr"><h3>Settings</h3><button class="modal-close" onclick="closeSettings()">×</button></div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" onclick="settingsTab('providers')">Providers</div>
+      <div class="modal-tab" onclick="settingsTab('agent')">Agent</div>
+      <div class="modal-tab" onclick="settingsTab('tools')">Tools</div>
+      <div class="modal-tab" onclick="settingsTab('theme')">Theme</div>
+    </div>
+    <div class="modal-body" id="settingsBody"></div>
   </div>
 </div>
 <script>
@@ -85,7 +137,9 @@ var ws,convId='',streaming=false,streamEl=null;
 var msgs=document.getElementById('messages'),input=document.getElementById('input');
 
 function connect(){
-  ws=new WebSocket('ws://'+location.host+'/ws');
+  var url='ws://'+location.host+'/ws';
+  if(authToken)url+='?token='+authToken;
+  ws=new WebSocket(url);
   ws.onmessage=function(e){handle(JSON.parse(e.data))};
   ws.onclose=function(){setTimeout(connect,2000)};
 }
@@ -141,6 +195,7 @@ function handle(d){
       if(activeStrip)activeStrip.removeAttribute('id');
       document.getElementById('sendBtn').className='send-btn';
       if(typeof hljs!=='undefined')hljs.highlightAll();
+      addCopyButtons();
       break;
     case 'stream.error':
       addMsg('system',d.error);streaming=false;streamEl=null;
@@ -190,16 +245,18 @@ function addMsg(role,content){
 
 function send(){
   if(streaming){ws.send(JSON.stringify({type:'chat.cancel',conversationId:convId}));return}
-  var text=input.value.trim();if(!text)return;
-  addMsg('user',text);
-  ws.send(JSON.stringify({type:'chat.send',conversationId:convId,content:text,mode:'chat'}));
+  var text=input.value.trim();if(!text&&!pendingImages.length)return;
+  addMsg('user',text||(pendingImages.length+' image(s)'));
+  var payload={type:'chat.send',conversationId:convId,content:text,mode:mode};
+  if(pendingImages.length){payload.images=pendingImages;pendingImages=[];updateImagePreview()}
+  ws.send(JSON.stringify(payload));
   input.value='';input.style.height='44px';
   streaming=true;
   document.getElementById('sendBtn').className='send-btn streaming';
 }
 
 function newChat(){convId='';msgs.innerHTML='<div class="empty">Send a message to start</div>';document.getElementById('title').textContent='AX'}
-function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}
+function handleKey(e){if(e.key==='Enter'&&e.ctrlKey){e.preventDefault();send()}}
 function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,160)+'px'}
 function escHtml(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
@@ -220,7 +277,7 @@ function submitEdit(btn){
   var text=btn.closest('.msg-wrap').querySelector('.edit-area')?.value;
   if(!text||streaming)return;
   addMsg('user',text);
-  ws.send(JSON.stringify({type:'chat.send',conversationId:convId,content:text,mode:'chat'}));
+  ws.send(JSON.stringify({type:'chat.send',conversationId:convId,content:text,mode:mode}));
   streaming=true;document.getElementById('sendBtn').className='send-btn streaming';
 }
 function retryMsg(){
@@ -229,25 +286,281 @@ function retryMsg(){
 }
 
 async function loadConversations(){
-  var r=await fetch('/api/conversations');var data=await r.json();
+  var r=await fetch('/api/conversations',{headers:authHeaders()});var data=await r.json();
   var list=document.getElementById('convList');
-  list.innerHTML=data.map(function(c){return '<div class="conv-item'+(c.id===convId?' active':'')+'" onclick="loadConv(\''+c.id+'\')">'+escHtml(c.title||'Untitled')+'</div>'}).join('');
+  list.innerHTML=data.map(function(c){return '<div class="conv-item'+(c.id===convId?' active':'')+'" onclick="loadConv(\''+c.id+'\')" ondblclick="event.stopPropagation();renameConv(\''+c.id+'\')">'+escHtml(c.title||'Untitled')+'</div>'}).join('');
 }
 async function loadConv(id){
   convId=id;
-  var r=await fetch('/api/conversations/'+id+'/messages');var data=await r.json();
+  var r=await fetch('/api/conversations/'+id+'/messages',{headers:authHeaders()});var data=await r.json();
   msgs.innerHTML='';
   data.forEach(function(m){if(m.role==='user'||m.role==='assistant')addMsg(m.role,m.content)});
   loadConversations();
 }
 async function loadModels(){
-  var r=await fetch('/api/models');var data=await r.json();
+  var r=await fetch('/api/models',{headers:authHeaders()});var data=await r.json();
   var sel=document.getElementById('modelSel');
   sel.innerHTML=data.map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
 }
-function setModel(m){fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:m})})}
+function setModel(m){fetch('/api/model',{method:'POST',headers:authHeaders(),body:JSON.stringify({model:m})})}
 
-connect();loadConversations();loadModels();
+function addCopyButtons(){
+  document.querySelectorAll('.msg-assistant pre').forEach(function(pre){
+    if(pre.querySelector('.copy-btn'))return;
+    var btn=document.createElement('button');
+    btn.className='copy-btn';btn.textContent='Copy';
+    btn.onclick=function(){
+      var code=pre.querySelector('code');
+      navigator.clipboard.writeText(code?code.textContent:pre.textContent);
+      btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy'},1500);
+    };
+    pre.appendChild(btn);
+  });
+}
+
+// Image paste/drop support
+function setupImageInput(){
+  var inputEl=document.getElementById('input');
+  inputEl.addEventListener('paste',function(e){
+    var items=e.clipboardData?.items;
+    if(!items)return;
+    for(var i=0;i<items.length;i++){
+      if(items[i].type.indexOf('image')!==-1){
+        var file=items[i].getAsFile();
+        attachImage(file);
+        e.preventDefault();
+        break;
+      }
+    }
+  });
+  inputEl.addEventListener('dragover',function(e){e.preventDefault()});
+  inputEl.addEventListener('drop',function(e){
+    e.preventDefault();
+    var files=e.dataTransfer?.files;
+    if(!files)return;
+    for(var i=0;i<files.length;i++){
+      if(files[i].type.indexOf('image')!==-1)attachImage(files[i]);
+    }
+  });
+}
+var pendingImages=[];
+function attachImage(file){
+  var reader=new FileReader();
+  reader.onload=function(){
+    pendingImages.push(reader.result);
+    updateImagePreview();
+  };
+  reader.readAsDataURL(file);
+}
+function updateImagePreview(){
+  var preview=document.getElementById('imagePreview');
+  if(!preview){
+    preview=document.createElement('div');
+    preview.id='imagePreview';
+    preview.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px';
+    document.querySelector('.mode-pills').after(preview);
+  }
+  preview.innerHTML=pendingImages.map(function(src,i){
+    return '<div style="position:relative"><img src="'+src+'" style="height:48px;border-radius:4px"><button style="position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;line-height:16px" onclick="removeImage('+i+')">x</button></div>';
+  }).join('');
+  preview.style.display=pendingImages.length?'flex':'none';
+}
+function removeImage(i){pendingImages.splice(i,1);updateImagePreview()}
+
+function toggleSidebar(){
+  document.querySelector('.sidebar').classList.toggle('open');
+}
+
+var mode='chat';
+var authToken=localStorage.getItem('ax_token')||'';
+
+function setMode(m,el){
+  mode=m;
+  document.querySelectorAll('.mode-pill').forEach(function(p){p.className='mode-pill'});
+  if(el)el.className='mode-pill active';
+}
+function toggleTheme(){
+  var isLight=document.documentElement.getAttribute('data-theme')==='light';
+  document.documentElement.setAttribute('data-theme',isLight?'':'light');
+  localStorage.setItem('ax_theme',isLight?'dark':'light');
+}
+var agentKeys=[
+  {key:'personality',label:'Personality',placeholder:'How the agent behaves'},
+  {key:'constraints',label:'Constraints',placeholder:'Rules and limitations'},
+  {key:'preferences',label:'Preferences',placeholder:'Response style preferences'},
+  {key:'agent_tools_tool_guidance',label:'Tool Guidance',placeholder:'How to use tools'},
+  {key:'search_provider_url',label:'Search Provider URL',placeholder:'https://search.xnet.ngo'}
+];
+
+function openSettings(){
+  document.getElementById('settingsModal').classList.add('open');
+  settingsTab('providers');
+}
+function closeSettings(){document.getElementById('settingsModal').classList.remove('open')}
+
+function settingsTab(name){
+  document.querySelectorAll('.modal-tab').forEach(function(t){t.classList.remove('active')});
+  document.querySelectorAll('.modal-tab').forEach(function(t){if(t.textContent.toLowerCase()===name||t.textContent===name.charAt(0).toUpperCase()+name.slice(1))t.classList.add('active')});
+  if(name==='providers')renderProviderSettings();
+  else if(name==='agent')renderAgentSettings();
+  else if(name==='tools')renderToolSettings();
+  else if(name==='theme')renderThemeSettings();
+}
+
+async function renderProviderSettings(){
+  var body=document.getElementById('settingsBody');
+  var r=await fetch('/api/providers',{headers:authHeaders()});
+  var providers=await r.json();
+  var r2=await fetch('/api/settings',{headers:authHeaders()});
+  var settings=await r2.json();
+  var currentModel=settings.selected_model||'';
+
+  var html='<div class="field"><label>Active Model</label><select id="prov_model" onchange="setModel(this.value)" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px">';
+  var r3=await fetch('/api/models',{headers:authHeaders()});
+  var models=await r3.json();
+  html+=models.map(function(m){return '<option value="'+m+'"'+(m===currentModel?' selected':'')+'>'+m+'</option>'}).join('');
+  html+='</select></div>';
+
+  html+='<h4 style="font-size:13px;color:var(--text2);margin:16px 0 8px">Providers</h4>';
+  providers.forEach(function(p){
+    var shortBase=p.apiBase&&p.apiBase.length>40?p.apiBase.slice(0,40)+'...':p.apiBase;
+    html+='<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center">';
+    html+='<div><div style="font-size:14px;font-weight:600">'+escHtml(p.name)+'</div>';
+    html+='<div style="font-size:11px;color:var(--text2)">'+escHtml(shortBase||'no url')+' · Key: '+(p.hasKey?'Yes':'No')+' · Models: '+(p.models?p.models.length:0)+'</div></div>';
+    html+='<div style="display:flex;gap:4px;align-items:center">';
+    html+='<label style="font-size:11px"><input type="checkbox" '+(p.enabled?'checked':'')+' onchange="provToggle(\''+escHtml(p.name)+'\')"> On</label>';
+    html+='<button class="msg-act" onclick="provDiscover(\''+escHtml(p.name)+'\')">Discover</button>';
+    html+='<button class="msg-act" onclick="provEdit(\''+escHtml(p.name)+'\')">Edit</button>';
+    html+='<button class="msg-act" onclick="provDelete(\''+escHtml(p.name)+'\')">Del</button>';
+    html+='</div></div></div>';
+  });
+
+  html+='<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">';
+  html+='<h4 style="font-size:13px;color:var(--text2);margin-bottom:8px">Add Provider</h4>';
+  html+='<div class="field"><input id="prov_name" placeholder="Name (e.g. openai)"></div>';
+  html+='<div class="field"><input id="prov_base" placeholder="API Base URL (e.g. https://api.openai.com/v1)"></div>';
+  html+='<div class="field"><input id="prov_key" type="password" placeholder="API Key"></div>';
+  html+='<button class="btn-primary" onclick="provAdd()">Add Provider</button>';
+  html+='</div>';
+
+  body.innerHTML=html;
+}
+
+function provToggle(name){
+  fetch('/api/providers/'+encodeURIComponent(name)+'/toggle',{method:'POST',headers:authHeaders()}).then(function(){renderProviderSettings()});
+}
+async function provDiscover(name){
+  var r=await fetch('/api/providers/'+encodeURIComponent(name)+'/discover',{method:'POST',headers:authHeaders()});
+  if(r.ok){var models=await r.json();alert('Discovered '+models.length+' models');renderProviderSettings()}
+  else{var err=await r.text();alert('Error: '+err)}
+}
+function provEdit(name){
+  var newBase=prompt('API Base URL:');
+  if(newBase===null)return;
+  var newKey=prompt('API Key (leave empty to keep current):');
+  if(newKey===null)return;
+  fetch('/api/providers/'+encodeURIComponent(name),{method:'PUT',headers:authHeaders(),body:JSON.stringify({apiBase:newBase,apiKey:newKey})}).then(function(){renderProviderSettings()});
+}
+function provDelete(name){
+  if(!confirm('Delete provider: '+name+'?'))return;
+  fetch('/api/providers/'+encodeURIComponent(name),{method:'DELETE',headers:authHeaders()}).then(function(){renderProviderSettings()});
+}
+function provAdd(){
+  var name=document.getElementById('prov_name').value.trim();
+  var base=document.getElementById('prov_base').value.trim();
+  var key=document.getElementById('prov_key').value;
+  if(!name||!base)return;
+  fetch('/api/providers',{method:'POST',headers:authHeaders(),body:JSON.stringify({name:name,apiBase:base,apiKey:key})}).then(function(){renderProviderSettings()});
+}
+
+async function renderAgentSettings(){
+  var body=document.getElementById('settingsBody');
+  var r=await fetch('/api/settings',{headers:authHeaders()});
+  var settings=await r.json();
+  body.innerHTML=agentKeys.map(function(k){
+    return '<div class="field"><label>'+k.label+'</label><textarea style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;min-height:60px;resize:vertical" placeholder="'+escHtml(k.placeholder)+'" onchange="updateSetting(\''+k.key+'\',this.value)">'+(settings[k.key]||'')+'</textarea></div>';
+  }).join('');
+}
+
+async function renderToolSettings(){
+  var body=document.getElementById('settingsBody');
+  var r=await fetch('/api/tools',{headers:authHeaders()});
+  var tools=await r.json();
+  var html='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">Toggle tools on/off. Disabled tools will not be available to the LLM.</p>';
+  tools.forEach(function(t){
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px">';
+    html+='<label style="display:flex;align-items:center;cursor:pointer"><input type="checkbox" '+(t.trusted?'checked':'')+' onchange="toolToggle(\''+escHtml(t.name)+'\',this.checked)"></label>';
+    html+='<div style="flex:1"><div style="font-size:13px;font-weight:500">'+escHtml(t.name)+'</div>';
+    html+='<div style="font-size:11px;color:var(--text2)">'+escHtml(t.description)+'</div></div>';
+    html+='<span style="font-size:10px;color:var(--text2);background:var(--card);padding:2px 6px;border-radius:4px">'+escHtml(t.source)+'</span>';
+    html+='</div>';
+  });
+  body.innerHTML=html;
+}
+
+function toolToggle(name,trusted){
+  fetch('/api/tools/'+encodeURIComponent(name),{method:'PUT',headers:authHeaders(),body:JSON.stringify({trusted:trusted})});
+}
+
+function renderThemeSettings(){
+  var body=document.getElementById('settingsBody');
+  var current=localStorage.getItem('ax_theme')||'dark';
+  body.innerHTML=['dark','light'].map(function(t){
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px;border:1px solid '+(current===t?'var(--primary)':'var(--border)')+';border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="applyTheme(\''+t+'\')"><div><div style="font-size:14px;font-weight:600">'+t.charAt(0).toUpperCase()+t.slice(1)+'</div><div style="font-size:12px;color:var(--text2)">'+(t==='dark'?'Dark background, light text':'Light background, dark text')+'</div></div>'+(current===t?'<span style="color:var(--primary)">●</span>':'')+'</div>';
+  }).join('');
+}
+
+function applyTheme(t){
+  localStorage.setItem('ax_theme',t);
+  document.documentElement.setAttribute('data-theme',t==='light'?'light':'');
+  renderThemeSettings();
+}
+
+function updateSetting(key,value){
+  fetch('/api/settings',{method:'POST',headers:authHeaders(),body:JSON.stringify({key:key,value:value})});
+}
+function deleteSetting(key){
+  if(!confirm('Delete setting: '+key+'?'))return;
+  fetch('/api/settings?key='+encodeURIComponent(key),{method:'DELETE',headers:authHeaders()}).then(function(){settingsTab('providers')});
+}
+function addSetting(){
+  var k=document.getElementById('addKey').value;
+  var v=document.getElementById('addVal').value;
+  if(!k)return;
+  fetch('/api/settings',{method:'POST',headers:authHeaders(),body:JSON.stringify({key:k,value:v})}).then(function(){settingsTab('providers')});
+}
+function renameConv(id){
+  var title=prompt('Rename conversation:');
+  if(!title)return;
+  fetch('/api/conversations/'+id,{method:'PUT',headers:authHeaders(),body:JSON.stringify({title:title})}).then(function(){loadConversations()});
+}
+function authHeaders(){
+  var h={'Content-Type':'application/json'};
+  if(authToken)h['Authorization']='Bearer '+authToken;
+  return h;
+}
+async function checkAuth(){
+  if(!authToken){
+    var r=await fetch('/api/conversations',{headers:authHeaders()});
+    if(r.status===401){showLogin();return false}
+  }
+  return true;
+}
+function showLogin(){
+  document.body.innerHTML='<div class="login-wrap"><div class="login-box"><h2>AX</h2><div class="login-err" id="loginErr">Invalid password</div><input type="password" id="loginPw" placeholder="Password" onkeydown="if(event.key===\'Enter\')doLogin()"><button onclick="doLogin()">Sign In</button></div></div>';
+}
+async function doLogin(){
+  var pw=document.getElementById('loginPw').value;
+  var r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+  if(r.ok){var d=await r.json();authToken=d.token;localStorage.setItem('ax_token',d.token);location.reload()}
+  else{document.getElementById('loginErr').style.display='block'}
+}
+
+// Apply saved theme
+if(localStorage.getItem('ax_theme')==='light')document.documentElement.setAttribute('data-theme','light');
+
+connect();setupImageInput();checkAuth().then(function(ok){if(ok){loadConversations();loadModels()}});
 </script>
 </body>
 </html>
