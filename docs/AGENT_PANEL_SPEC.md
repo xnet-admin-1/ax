@@ -141,17 +141,26 @@ When user "/return"s, everything reverts.
 
 ### Purpose
 
-When spawning an agent, results always report to the user (displayed in agent panel monitor). The old "report to chat agent" behavior (feeding results back to the main LLM) has been removed to prevent confusing double-responses.
+When spawning an agent, choose where results go:
+- **User** — result displayed in agent panel monitor only (doesn't interrupt chat)
+- **Chat** — result fed back to the main LLM as context (triggers a response)
 
 ### UI
 
-No toggle needed — all spawn results display in the Monitor tab. The user can manually copy/paste results into chat if needed.
+In the Spawn tab, below the task textarea:
+```
+Report to:  (●) User    ( ) Chat Agent
+```
+
+Radio buttons. Default: User (non-intrusive).
 
 ### Implementation
 
-- `Task.ReportTo` is always `"user"`
-- `deliverPendingReports()` only displays results, never triggers new LLM calls
-- Spawn API does not accept a `reportTo` field
+The existing `Task.ReportTo` field (`"user"` or `"agent"`) already controls this.
+- Pass `reportTo` in spawn request: `POST /api/agents/spawn` body gets `{"agent":"x","task":"y","reportTo":"user"}`
+- TUI's `deliverPendingReports()` checks this and either displays or feeds back to LLM
+
+For web: when `reportTo === "agent"`, the server feeds the result into the active conversation's message history and triggers a new LLM call. The web client receives the result as a normal `stream.delta`.
 
 ---
 
