@@ -84,6 +84,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /api/agents/tasks", s.requireAuth(s.Handlers.ListTasks))
 	mux.HandleFunc("POST /api/agents/spawn", s.requireAuth(s.Handlers.SpawnAgent))
 	mux.HandleFunc("POST /api/agents/cancel/{id}", s.requireAuth(s.Handlers.CancelTask))
+	mux.HandleFunc("GET /api/agents/tasks/{id}/log", s.requireAuth(s.Handlers.GetTaskLog))
 	mux.HandleFunc("GET /api/agents/roster", s.requireAuth(s.Handlers.GetRoster))
 	mux.HandleFunc("POST /api/agents/roster", s.requireAuth(s.Handlers.SaveRosterItem))
 	mux.HandleFunc("DELETE /api/agents/roster/{name}", s.requireAuth(s.Handlers.DeleteRosterItem))
@@ -182,6 +183,41 @@ func (s *Server) handleMessage(client *Client, data []byte) {
 			delete(s.sessions, msg.ConversationID)
 		}
 		s.mu.Unlock()
+
+	case "agent.subscribe":
+		var msg struct {
+			Type   string `json:"type"`
+			TaskID string `json:"taskId"`
+		}
+		if json.Unmarshal(data, &msg) != nil || msg.TaskID == "" {
+			return
+		}
+		go s.streamTaskEvents(client, msg.TaskID)
+
+	case "agent.unsubscribe":
+		// Client navigated away — subscription goroutine will exit on its own
+	}
+}
+
+func (s *Server) streamTaskEvents(client *Client, taskID string) {
+	if s.Handlers.AgentMgr == nil { return }
+	t := s.Handlers.AgentMgr.GetTask(taskID)
+	if t == nil { return }
+	// Send existing log as catch-up
+	for _, ev := range t.GetLog() {
+		client.Send(map[string]any{"type": "agent.event", "taskId": taskID, "event": map[string]string{"type": ev.Type, "text": ev.Text}})
+	}
+	if t.Status == "done" || t.Status == "error" {
+		client.Send(map[string]any{"type": "agent.status", "taskId": taskID, "status": t.Status, "result": t.Result})
+		return
+	}
+	// Stream live events
+	for ev := range t.Events {
+		client.Send(map[string]any{"type": "agent.event", "taskId": taskID, "event": map[string]string{"type": ev.Type, "text": ev.Text}})
+		if ev.Type == "done" || ev.Type == "error" {
+			client.Send(map[string]any{"type": "agent.status", "taskId": taskID, "status": t.Status, "result": t.Result})
+			return
+		}
 	}
 }
 

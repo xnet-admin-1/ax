@@ -230,6 +230,12 @@ function handle(d){
       if(typeof hljs!=='undefined')hljs.highlightAll();
       addCopyButtons();
       break;
+    case 'agent.event':
+      if(viewingTaskId===d.taskId)appendTaskEvent(d.event);
+      break;
+    case 'agent.status':
+      if(viewingTaskId===d.taskId){var el=document.getElementById('taskLog');if(el){var div=document.createElement('div');div.style.cssText='margin-top:8px;padding:6px;border:1px solid var(--border);border-radius:4px;font-weight:500';div.textContent='Status: '+d.status;el.appendChild(div)}}
+      break;
     case 'stream.error':
       addMsg('system',d.error);streaming=false;streamEl=null;
       document.getElementById('sendBtn').className='send-btn';document.getElementById('sendBtn').innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
@@ -443,7 +449,7 @@ async function renderAgentMonitor(){
   var tasks=await r.json();
   if(!tasks.length){body.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">No active tasks</div>';return}
   body.innerHTML=tasks.map(function(t){
-    return '<div class="task-item"><div style="display:flex;justify-content:space-between"><span class="task-name">'+escHtml(t.agent)+'</span><span class="task-status '+t.status+'">'+t.status+'</span></div><div style="font-size:11px;color:var(--text2);margin-top:4px">'+escHtml(t.desc)+'</div>'+(t.status==='running'?'<button class="msg-act" style="margin-top:4px" onclick="cancelTask(\''+t.id+'\')">Cancel</button>':'')+(t.result?'<div style="font-size:11px;margin-top:4px;padding:4px 6px;background:var(--card);border-radius:4px;max-height:80px;overflow-y:auto;white-space:pre-wrap">'+escHtml(t.result)+'</div>':'')+'</div>';
+    return '<div class="task-item" style="cursor:pointer" onclick="viewTask(\''+t.id+'\')"><div style="display:flex;justify-content:space-between"><span class="task-name">'+escHtml(t.agent)+'</span><span class="task-status '+t.status+'">'+t.status+'</span></div><div style="font-size:11px;color:var(--text2);margin-top:4px">'+escHtml(t.desc)+'</div>'+(t.status==='running'?'<button class="msg-act" style="margin-top:4px" onclick="cancelTask(\''+t.id+'\')">Cancel</button>':'')+(t.result?'<div style="font-size:11px;margin-top:4px;padding:4px 6px;background:var(--card);border-radius:4px;max-height:80px;overflow-y:auto;white-space:pre-wrap">'+escHtml(t.result)+'</div>':'')+'</div>';
   }).join('');
 }
 async function renderAgentSpawn(){
@@ -452,7 +458,7 @@ async function renderAgentSpawn(){
   var roster=await r.json();
   body.innerHTML='<div class="field"><label>Agent</label><select id="spawnAgent" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px">'+
     roster.map(function(a){return '<option value="'+escHtml(a.name)+'">'+escHtml(a.name)+'</option>'}).join('')+
-    '</select></div><div class="field"><label>Task</label><textarea id="spawnTask" rows="3" placeholder="Describe the task..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical"></textarea></div><div class="field"><label>Report to</label><div style="display:flex;gap:12px;font-size:12px"><label><input type="radio" name="reportTo" value="user" checked> User</label><label><input type="radio" name="reportTo" value="agent"> Chat Agent</label></div></div><button class="btn-primary" onclick="doSpawn()">Spawn Agent</button>';
+    '</select></div><div class="field"><label>Task</label><textarea id="spawnTask" rows="3" placeholder="Describe the task..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical"></textarea></div><button class="btn-primary" onclick="doSpawn()">Spawn Agent</button>';
 }
 async function doSpawn(){
   var agent=document.getElementById('spawnAgent').value;
@@ -465,14 +471,42 @@ async function doSpawn(){
 function cancelTask(id){
   fetch('/api/agents/cancel/'+id,{method:'POST',headers:authHeaders()}).then(function(){renderAgentMonitor()});
 }
+function viewTask(id){
+  viewingTaskId=id;
+  renderTaskDetail();
+  // Subscribe to live events
+  if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'agent.subscribe',taskId:id}));
+}
+function renderTaskDetail(){
+  if(!viewingTaskId){renderAgentMonitor();return}
+  var body=document.getElementById('agentBody');
+  body.innerHTML='<div style="margin-bottom:8px"><button class="msg-act" onclick="viewingTaskId=null;renderAgentMonitor()">Back</button></div><div id="taskLog" style="font-size:12px;overflow-y:auto;max-height:calc(100vh - 200px)"></div>';
+  // Fetch existing log
+  fetch('/api/agents/tasks/'+viewingTaskId+'/log',{headers:authHeaders()}).then(function(r){return r.json()}).then(function(log){
+    var el=document.getElementById('taskLog');if(!el)return;
+    log.forEach(function(ev){appendTaskEvent(ev)});
+  });
+}
+function appendTaskEvent(ev){
+  var el=document.getElementById('taskLog');if(!el)return;
+  var div=document.createElement('div');
+  div.style.cssText='margin-bottom:4px;padding:4px 6px;border-radius:4px;';
+  if(ev.type==='delta'){div.style.background='var(--card)';div.textContent=ev.text}
+  else if(ev.type==='tool_call'){div.style.color='var(--primary)';div.textContent='[tool] '+ev.text}
+  else if(ev.type==='tool_result'){div.style.color='var(--text2)';div.style.fontSize='11px';div.textContent=ev.text.slice(0,200)}
+  else{div.style.color='var(--text2)';div.textContent='['+ev.type+'] '+ev.text}
+  el.appendChild(div);
+  el.scrollTop=el.scrollHeight;
+}
 var editingAgent=null;
+var viewingTaskId=null;
 async function renderAgentRoster(){
   var body=document.getElementById("agentBody");
   if(editingAgent){renderAgentDetail();return}
   var r=await fetch("/api/agents/roster",{headers:authHeaders()});
   var roster=await r.json();
   var html=roster.map(function(a){
-    return '<div class="roster-item" onclick="openAgentDetail(\''+escHtml(a.name)+'\'')"><div><div class="roster-name">'+escHtml(a.name)+'</div><div class="roster-desc">'+escHtml((a.model||"default")+" · "+(a.systemPrompt||"").slice(0,40))+'</div></div><button class="msg-act" onclick="event.stopPropagation();deleteRosterAgent(\''+escHtml(a.name)+'\'')">Del</button></div>';
+    return '<div class="roster-item" onclick="openAgentDetail(this.dataset.name)" data-name="'+escHtml(a.name)+'"><div><div class="roster-name">'+escHtml(a.name)+'</div><div class="roster-desc">'+escHtml((a.model||'default')+' . '+(a.systemPrompt||'').slice(0,40))+'</div></div><button class="msg-act" onclick="event.stopPropagation();deleteRosterAgent(this.parentNode.dataset.name)">Del</button></div>';
   }).join("");
   html+='<button class="btn-primary" style="margin-top:8px;width:100%" onclick="addRosterAgent()">+ Add Agent</button>';
   body.innerHTML=html;

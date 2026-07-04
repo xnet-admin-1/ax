@@ -426,3 +426,18 @@ func (h *Handlers) DeleteRosterItem(w http.ResponseWriter, r *http.Request) {
 	h.AgentMgr.SaveRoster(filtered)
 	w.WriteHeader(200)
 }
+
+// GetTaskLog returns the full event log for a task
+func (h *Handlers) GetTaskLog(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if h.AgentMgr == nil {
+		json.NewEncoder(w).Encode([]any{})
+		return
+	}
+	t := h.AgentMgr.GetTask(id)
+	if t == nil {
+		http.Error(w, "task not found", 404)
+		return
+	}
+	json.NewEncoder(w).Encode(t.GetLog())
+}
