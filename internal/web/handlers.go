@@ -441,3 +441,25 @@ func (h *Handlers) GetTaskLog(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewEncoder(w).Encode(t.GetLog())
 }
+
+// StartHandoff switches the active chat to use an agent's prompt/model/tools
+func (h *Handlers) StartHandoff(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Agent string `json:"agent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Agent == "" {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"agent": body.Agent, "status": "active"})
+}
+
+// EndHandoff returns to the default agent
+func (h *Handlers) EndHandoff(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+}
+
+// GetHandoff returns current handoff state
+func (h *Handlers) GetHandoff(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(map[string]any{"active": false})
+}

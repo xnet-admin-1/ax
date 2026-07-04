@@ -29,6 +29,14 @@ type Server struct {
 	Bind     string
 	Token    string // active session token
 
+	// Handoff state
+	handoffAgent string
+	handoffSaved struct {
+		prompt string
+		tools  []string
+		model  string
+	}
+
 	// Active streaming sessions (convID → cancel func)
 	mu       sync.Mutex
 	sessions map[string]context.CancelFunc
@@ -88,6 +96,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /api/agents/roster", s.requireAuth(s.Handlers.GetRoster))
 	mux.HandleFunc("POST /api/agents/roster", s.requireAuth(s.Handlers.SaveRosterItem))
 	mux.HandleFunc("DELETE /api/agents/roster/{name}", s.requireAuth(s.Handlers.DeleteRosterItem))
+	mux.HandleFunc("POST /api/agents/handoff", s.requireAuth(s.handleHandoff))
+	mux.HandleFunc("POST /api/agents/return", s.requireAuth(s.handleReturn))
+	mux.HandleFunc("GET /api/agents/handoff", s.requireAuth(s.getHandoff))
 
 	// WebSocket
 	mux.HandleFunc("/ws", s.handleWS)
@@ -218,6 +229,33 @@ func (s *Server) streamTaskEvents(client *Client, taskID string) {
 			client.Send(map[string]any{"type": "agent.status", "taskId": taskID, "status": t.Status, "result": t.Result})
 			return
 		}
+	}
+}
+
+func (s *Server) handleHandoff(w http.ResponseWriter, r *http.Request) {
+	var body struct{ Agent string `json:"agent"` }
+	if json.NewDecoder(r.Body).Decode(&body) != nil || body.Agent == "" {
+		http.Error(w, "invalid body", 400); return
+	}
+	roster := s.Handlers.AgentMgr.GetRoster()
+	for _, a := range roster {
+		if a.Name == body.Agent {
+			s.handoffAgent = a.Name
+			json.NewEncoder(w).Encode(map[string]string{"agent": a.Name, "status": "active"})
+			return
+		}
+	}
+	http.Error(w, "agent not found", 404)
+}
+func (s *Server) handleReturn(w http.ResponseWriter, r *http.Request) {
+	s.handoffAgent = ""
+	w.WriteHeader(200)
+}
+func (s *Server) getHandoff(w http.ResponseWriter, r *http.Request) {
+	if s.handoffAgent != "" {
+		json.NewEncoder(w).Encode(map[string]any{"active": true, "agent": s.handoffAgent})
+	} else {
+		json.NewEncoder(w).Encode(map[string]any{"active": false})
 	}
 }
 

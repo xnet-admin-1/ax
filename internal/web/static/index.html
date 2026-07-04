@@ -195,6 +195,7 @@ function handle(d){
       if(streamEl){streamEl.dataset.reasoning+=d.delta;renderStream()}
       break;
     case 'stream.tool_call':
+      if(d.toolCall&&d.toolCall.name==='orchestrate'){try{var args=JSON.parse(d.toolCall.arguments||'{}');if(args.stages)renderOrchestrate(args.stages)}catch(e){}}
       var strip=document.getElementById('tool-strip-active');
       if(!strip){strip=document.createElement('div');strip.className='tool-strip';strip.id='tool-strip-active';if(streamEl)streamEl.parentNode.insertBefore(strip,streamEl)}
       var chip=document.createElement('span');
@@ -204,6 +205,7 @@ function handle(d){
       strip.appendChild(chip);
       break;
     case 'stream.tool_result':
+      if(d.toolCallId&&document.getElementById('orchStages')){updateOrchestrate(d.result)}
       var tcel=document.getElementById('tc-'+d.toolCallId);
       if(tcel){
         tcel.className='tool-chip '+(d.isError?'error':'done');
@@ -356,6 +358,29 @@ function updateTitleModel(m){
   if(el)el.textContent=short?" · "+short:"";
 }
 
+function renderOrchestrate(stages){
+  var el=document.createElement('div');
+  el.id='orchStages';el.style.cssText='margin:8px 0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px';
+  el.innerHTML='<div style="font-weight:500;margin-bottom:6px">Orchestrating '+stages.length+' stages</div>'+stages.map(function(s){
+    var deps=s.depends_on&&s.depends_on.length?' (after: '+s.depends_on.join(', ')+')':'';
+    return '<div class="orch-stage" data-name="'+escHtml(s.name)+'" style="display:flex;align-items:center;gap:6px;padding:3px 0"><span class="orch-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span><span>'+escHtml(s.name)+'</span><span style="color:var(--text2);font-size:11px">'+escHtml(s.agent||'default')+deps+'</span></div>';
+  }).join('');
+  if(streamEl)streamEl.parentNode.insertBefore(el,streamEl);
+  else msgs.appendChild(el);
+}
+function updateOrchestrate(text){
+  if(!text)return;
+  var el=document.getElementById('orchStages');if(!el)return;
+  var m=text.match(/\[(.+?)\] (started|completed)/);
+  if(!m)return;
+  var name=m[1],status=m[2];
+  var stage=el.querySelector('[data-name="'+name+'"]');
+  if(!stage)return;
+  var dot=stage.querySelector('.orch-dot');
+  if(status==='started'){dot.style.background='var(--primary)'}
+  else if(status==='completed'){dot.style.background='var(--green)'}
+}
+
 function addCopyButtons(){
   document.querySelectorAll('.msg-assistant pre').forEach(function(pre){
     if(pre.querySelector('.copy-btn'))return;
@@ -506,7 +531,7 @@ async function renderAgentRoster(){
   var r=await fetch("/api/agents/roster",{headers:authHeaders()});
   var roster=await r.json();
   var html=roster.map(function(a){
-    return '<div class="roster-item" onclick="openAgentDetail(this.dataset.name)" data-name="'+escHtml(a.name)+'"><div><div class="roster-name">'+escHtml(a.name)+'</div><div class="roster-desc">'+escHtml((a.model||'default')+' . '+(a.systemPrompt||'').slice(0,40))+'</div></div><button class="msg-act" onclick="event.stopPropagation();deleteRosterAgent(this.parentNode.dataset.name)">Del</button></div>';
+    return '<div class="roster-item" onclick="openAgentDetail(this.dataset.name)" data-name="'+escHtml(a.name)+'"><div><div class="roster-name">'+escHtml(a.name)+'</div><div class="roster-desc">'+escHtml((a.model||'default')+' . '+(a.systemPrompt||'').slice(0,40))+'</div></div><button class="msg-act" onclick="event.stopPropagation();handoffTo(this.parentNode.parentNode.dataset.name)">Handoff</button><button class="msg-act" onclick="event.stopPropagation();deleteRosterAgent(this.parentNode.dataset.name)">Del</button></div>';
   }).join("");
   html+='<button class="btn-primary" style="margin-top:8px;width:100%" onclick="addRosterAgent()">+ Add Agent</button>';
   body.innerHTML=html;
@@ -551,6 +576,24 @@ function addRosterAgent(){
 function deleteRosterAgent(name){
   if(!confirm('Delete agent: '+name+'?'))return;
   fetch('/api/agents/roster/'+encodeURIComponent(name),{method:'DELETE',headers:authHeaders()}).then(function(){renderAgentRoster()});
+}
+
+var activeHandoff=null;
+async function handoffTo(name){
+  var r=await fetch('/api/agents/handoff',{method:'POST',headers:authHeaders(),body:JSON.stringify({agent:name})});
+  if(r.ok){activeHandoff=name;updateHandoffUI()}
+}
+async function returnHandoff(){
+  await fetch('/api/agents/return',{method:'POST',headers:authHeaders()});
+  activeHandoff=null;updateHandoffUI();
+}
+function updateHandoffUI(){
+  var el=document.getElementById('activeModel');
+  if(activeHandoff){el.textContent=' ['+activeHandoff+']'}
+  else{loadModels()}
+  var rb=document.getElementById('returnBtn');
+  if(activeHandoff){if(!rb){rb=document.createElement('button');rb.id='returnBtn';rb.className='msg-act';rb.style.cssText='margin-left:8px;color:var(--red)';rb.textContent='Return';rb.onclick=returnHandoff;el.parentNode.appendChild(rb)}}
+  else{if(rb)rb.remove()}
 }
 
 var mode='chat';
