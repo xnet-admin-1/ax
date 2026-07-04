@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/xnet-admin-1/ax/internal/agent"
 	"github.com/xnet-admin-1/ax/internal/gateway"
 )
 
 type Handlers struct {
 	DB      *sql.DB
 	Gateway *gateway.Router
+	AgentMgr *agent.Manager
 }
 
 // ListConversations returns all conversations
@@ -296,5 +298,131 @@ func (h *Handlers) ToggleTool(w http.ResponseWriter, r *http.Request) {
 		val = "1"
 	}
 	h.DB.Exec("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", "tool_trust_"+name, val)
+	w.WriteHeader(200)
+}
+
+// ListTasks returns running/completed agent tasks
+func (h *Handlers) ListTasks(w http.ResponseWriter, r *http.Request) {
+	if h.AgentMgr == nil {
+		json.NewEncoder(w).Encode([]any{})
+		return
+	}
+	type taskDTO struct {
+		ID        string `json:"id"`
+		Agent     string `json:"agent"`
+		Status    string `json:"status"`
+		Desc      string `json:"desc"`
+		Result    string `json:"result"`
+		StartedAt int64  `json:"startedAt"`
+	}
+	tasks := h.AgentMgr.ListTasks()
+	var out []taskDTO
+	for _, t := range tasks {
+		desc := t.ID[:8]
+		if len(t.Log) > 0 {
+			desc = t.Log[0].Text
+			if len(desc) > 60 { desc = desc[:60] }
+		}
+		result := t.Result
+		if len(result) > 200 { result = result[:200] + "..." }
+		out = append(out, taskDTO{
+			ID:        t.ID,
+			Agent:     t.Agent,
+			Status:    t.Status,
+			Desc:      desc,
+			Result:    result,
+			StartedAt: t.StartedAt.UnixMilli(),
+		})
+	}
+	if out == nil { out = []taskDTO{} }
+	json.NewEncoder(w).Encode(out)
+}
+
+// SpawnAgent spawns a background agent task
+func (h *Handlers) SpawnAgent(w http.ResponseWriter, r *http.Request) {
+	if h.AgentMgr == nil {
+		http.Error(w, "no agent manager", 500)
+		return
+	}
+	var body struct {
+		Agent    string `json:"agent"`
+		Task     string `json:"task"`
+		ReportTo string `json:"reportTo"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Task == "" {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	if body.Agent == "" { body.Agent = "default" }
+	if body.ReportTo == "" { body.ReportTo = "user" }
+	id, err := h.AgentMgr.Spawn(body.Agent, body.Task, body.ReportTo)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"id": id})
+}
+
+// CancelTask cancels a running agent task
+func (h *Handlers) CancelTask(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if h.AgentMgr != nil {
+		h.AgentMgr.Cancel(id)
+	}
+	w.WriteHeader(200)
+}
+
+// GetRoster returns the agent roster
+func (h *Handlers) GetRoster(w http.ResponseWriter, r *http.Request) {
+	if h.AgentMgr == nil {
+		json.NewEncoder(w).Encode([]any{})
+		return
+	}
+	roster := h.AgentMgr.GetRoster()
+	json.NewEncoder(w).Encode(roster)
+}
+
+// SaveRosterItem adds or updates an agent in the roster
+func (h *Handlers) SaveRosterItem(w http.ResponseWriter, r *http.Request) {
+	if h.AgentMgr == nil {
+		http.Error(w, "no agent manager", 500)
+		return
+	}
+	var ag agent.Agent
+	if err := json.NewDecoder(r.Body).Decode(&ag); err != nil || ag.Name == "" {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	roster := h.AgentMgr.GetRoster()
+	found := false
+	for i, a := range roster {
+		if a.Name == ag.Name {
+			roster[i] = ag
+			found = true
+			break
+		}
+	}
+	if !found {
+		roster = append(roster, ag)
+	}
+	h.AgentMgr.SaveRoster(roster)
+	w.WriteHeader(200)
+}
+
+// DeleteRosterItem removes an agent from the roster
+func (h *Handlers) DeleteRosterItem(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if h.AgentMgr == nil {
+		w.WriteHeader(200)
+		return
+	}
+	roster := h.AgentMgr.GetRoster()
+	var filtered []agent.Agent
+	for _, a := range roster {
+		if a.Name != name {
+			filtered = append(filtered, a)
+		}
+	}
+	h.AgentMgr.SaveRoster(filtered)
 	w.WriteHeader(200)
 }

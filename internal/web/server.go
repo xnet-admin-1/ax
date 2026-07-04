@@ -36,11 +36,12 @@ type Server struct {
 
 func NewServer(db *sql.DB, gw *gateway.Router, webFS fs.FS, bind string, port int, password string) *Server {
 	hub := NewHub()
+	agentMgr := agent.NewManager(db, gw)
 	return &Server{
 		DB:       db,
 		Gateway:  gw,
 		Hub:      hub,
-		Handlers: &Handlers{DB: db, Gateway: gw},
+		Handlers: &Handlers{DB: db, Gateway: gw, AgentMgr: agentMgr},
 		WebFS:    webFS,
 		Password: password,
 		Port:     port,
@@ -80,6 +81,12 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /api/providers/{name}/discover", s.requireAuth(s.Handlers.DiscoverModels))
 	mux.HandleFunc("GET /api/tools", s.requireAuth(s.Handlers.ListTools))
 	mux.HandleFunc("PUT /api/tools/{name}", s.requireAuth(s.Handlers.ToggleTool))
+	mux.HandleFunc("GET /api/agents/tasks", s.requireAuth(s.Handlers.ListTasks))
+	mux.HandleFunc("POST /api/agents/spawn", s.requireAuth(s.Handlers.SpawnAgent))
+	mux.HandleFunc("POST /api/agents/cancel/{id}", s.requireAuth(s.Handlers.CancelTask))
+	mux.HandleFunc("GET /api/agents/roster", s.requireAuth(s.Handlers.GetRoster))
+	mux.HandleFunc("POST /api/agents/roster", s.requireAuth(s.Handlers.SaveRosterItem))
+	mux.HandleFunc("DELETE /api/agents/roster/{name}", s.requireAuth(s.Handlers.DeleteRosterItem))
 
 	// WebSocket
 	mux.HandleFunc("/ws", s.handleWS)
