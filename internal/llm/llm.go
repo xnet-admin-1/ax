@@ -106,6 +106,11 @@ var BuiltinTools = []ToolDef{
 		"type": "object", "properties": map[string]any{
 			"stages": map[string]any{"type": "array", "description": "Array of stage objects: [{name, agent, task, depends_on?}]"},
 		}, "required": []string{"stages"}}},
+	{Name: "task_plan", Description: "Manage a visible task plan for multi-step work", Parameters: map[string]any{
+		"type": "object", "properties": map[string]any{
+			"action": map[string]any{"type": "string", "description": "create, complete, or update"},
+			"tasks":  map[string]any{"type": "array", "description": "Task strings (for create)"},
+		}, "required": []string{"action"}}},
 }
 
 func str(args map[string]any, key string) string {
@@ -297,6 +302,8 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 			return ctx.Orchestrate(string(raw)), nil
 		}
 		return "orchestrate not available in this context", nil
+	case "task_plan":
+		return executeTaskPlan(args), nil
 	case "spawn_agent":
 		agentName := str(args, "agent")
 		if agentName == "" {
@@ -370,3 +377,161 @@ type TaskParams struct {
 }
 
 func ExecuteTask(_ interface{}, _ TaskParams) ([]ChatMessage, error) { return nil, nil }
+
+// Task Plan — visible checklist for the agent's work progress
+// Persists across turns within a session (global state)
+type TaskPlanItem struct {
+	ID       string `json:"id"`
+	Text     string `json:"text"`
+	Details  string `json:"details,omitempty"`
+	Done     bool   `json:"done"`
+	Context  string `json:"context,omitempty"`
+}
+
+type TaskPlan struct {
+	Description   string         `json:"description"`
+	Tasks         []TaskPlanItem `json:"tasks"`
+	ModifiedFiles []string       `json:"modified_files,omitempty"`
+}
+
+var ActivePlan *TaskPlan
+
+func executeTaskPlan(args map[string]any) string {
+	action, _ := args["action"].(string)
+
+	switch action {
+	case "create":
+		desc, _ := args["description"].(string)
+		tasksRaw, _ := args["tasks"].([]any)
+		var tasks []TaskPlanItem
+		for i, t := range tasksRaw {
+			switch v := t.(type) {
+			case string:
+				tasks = append(tasks, TaskPlanItem{ID: fmt.Sprintf("%d", i+1), Text: v})
+			case map[string]any:
+				text, _ := v["task_description"].(string)
+				details, _ := v["details"].(string)
+				tasks = append(tasks, TaskPlanItem{ID: fmt.Sprintf("%d", i+1), Text: text, Details: details})
+			}
+		}
+		if len(tasks) == 0 {
+			return "error: tasks array required"
+		}
+		ActivePlan = &TaskPlan{Description: desc, Tasks: tasks}
+		return formatPlan()
+
+	case "complete":
+		if ActivePlan == nil {
+			return "error: no active plan. Use action=create first."
+		}
+		// Support completing multiple tasks at once
+		idsRaw, _ := args["completed_task_ids"].([]any)
+		ctx, _ := args["context_update"].(string)
+		if ctx == "" {
+			ctx, _ = args["context"].(string)
+		}
+		// Also support single task_id
+		if len(idsRaw) == 0 {
+			if id, ok := args["task_id"].(string); ok && id != "" {
+				idsRaw = []any{id}
+			}
+		}
+		for _, idRaw := range idsRaw {
+			id := fmt.Sprintf("%v", idRaw)
+			for i := range ActivePlan.Tasks {
+				if ActivePlan.Tasks[i].ID == id {
+					ActivePlan.Tasks[i].Done = true
+					if ctx != "" {
+						ActivePlan.Tasks[i].Context = ctx
+					}
+				}
+			}
+		}
+		// Track modified files
+		if files, ok := args["modified_files"].([]any); ok {
+			for _, f := range files {
+				if s, ok := f.(string); ok {
+					ActivePlan.ModifiedFiles = append(ActivePlan.ModifiedFiles, s)
+				}
+			}
+		}
+		return formatPlan()
+
+	case "add":
+		if ActivePlan == nil {
+			return "error: no active plan. Use action=create first."
+		}
+		tasksRaw, _ := args["new_tasks"].([]any)
+		if tasksRaw == nil {
+			tasksRaw, _ = args["tasks"].([]any)
+		}
+		nextID := len(ActivePlan.Tasks) + 1
+		for _, t := range tasksRaw {
+			switch v := t.(type) {
+			case string:
+				ActivePlan.Tasks = append(ActivePlan.Tasks, TaskPlanItem{ID: fmt.Sprintf("%d", nextID), Text: v})
+			case map[string]any:
+				text, _ := v["task_description"].(string)
+				details, _ := v["details"].(string)
+				ActivePlan.Tasks = append(ActivePlan.Tasks, TaskPlanItem{ID: fmt.Sprintf("%d", nextID), Text: text, Details: details})
+			}
+			nextID++
+		}
+		return formatPlan()
+
+	case "remove":
+		if ActivePlan == nil {
+			return "error: no active plan"
+		}
+		idsRaw, _ := args["remove_task_ids"].([]any)
+		remove := map[string]bool{}
+		for _, id := range idsRaw {
+			remove[fmt.Sprintf("%v", id)] = true
+		}
+		var kept []TaskPlanItem
+		for _, t := range ActivePlan.Tasks {
+			if !remove[t.ID] {
+				kept = append(kept, t)
+			}
+		}
+		ActivePlan.Tasks = kept
+		return formatPlan()
+
+	case "list":
+		return formatPlan()
+
+	default:
+		return "error: action must be create, complete, add, remove, or list"
+	}
+}
+
+func formatPlan() string {
+	if ActivePlan == nil {
+		return "(no active plan)"
+	}
+	var b strings.Builder
+	if ActivePlan.Description != "" {
+		b.WriteString("## " + ActivePlan.Description + "\n\n")
+	}
+	done := 0
+	for _, t := range ActivePlan.Tasks {
+		mark := "[ ]"
+		if t.Done {
+			mark = "[x]"
+			done++
+		}
+		fmt.Fprintf(&b, "%s %s. %s", mark, t.ID, t.Text)
+		if t.Details != "" {
+			b.WriteString("\n    " + t.Details)
+		}
+		if t.Context != "" {
+			b.WriteString("\n    > " + t.Context)
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "\nProgress: %d/%d complete", done, len(ActivePlan.Tasks))
+	if len(ActivePlan.ModifiedFiles) > 0 {
+		b.WriteString("\nModified: " + strings.Join(ActivePlan.ModifiedFiles, ", "))
+	}
+	return b.String()
+}

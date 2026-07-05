@@ -36,8 +36,8 @@ type Agent struct {
 }
 
 type TaskEvent struct {
-	Type   string // delta, tool_call, tool_result, progress, done, error
-	Text   string
+	Type   string `json:"type"` // delta, tool_call, tool_result, progress, done, error
+	Text   string `json:"text"`
 }
 
 type Task struct {
@@ -390,7 +390,6 @@ var agentToolDefs = []map[string]any{
 	{"type": "function", "function": map[string]any{"name": "write_file", "description": "Write file", "parameters": map[string]any{"type": "object", "required": []string{"path", "content"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Path"}, "content": map[string]string{"type": "string", "description": "Content"}}}}},
 	{"type": "function", "function": map[string]any{"name": "list_dir", "description": "List directory", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Path"}}}}},
 	{"type": "function", "function": map[string]any{"name": "search_web", "description": "Search the web", "parameters": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string", "description": "Query"}}}}},
-	{"type": "function", "function": map[string]any{"name": "spawn_agent", "description": "Spawn a sub-agent to work on a subtask. Available: architect, coder, researcher, qa, security, devops, writer.", "parameters": map[string]any{"type": "object", "required": []string{"agent", "task"}, "properties": map[string]any{"agent": map[string]string{"type": "string", "description": "Agent name"}, "task": map[string]string{"type": "string", "description": "Task"}}}}},
 }
 
 func (m *Manager) executeAgentTool(name string, args map[string]any) string {

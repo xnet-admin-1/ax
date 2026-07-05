@@ -324,7 +324,6 @@ func (h *Handlers) ListTasks(w http.ResponseWriter, r *http.Request) {
 			if len(desc) > 60 { desc = desc[:60] }
 		}
 		result := t.Result
-		if len(result) > 200 { result = result[:200] + "..." }
 		out = append(out, taskDTO{
 			ID:        t.ID,
 			Agent:     t.Agent,

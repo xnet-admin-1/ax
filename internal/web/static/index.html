@@ -105,7 +105,7 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
 .login-err{color:var(--red);font-size:.85rem;margin-bottom:.5rem;display:none}
 .agent-panel{width:300px;background:var(--surface);border-left:1px solid var(--border);display:none;flex-direction:column;flex-shrink:0;overflow:hidden}
 .agent-panel.open{display:flex}
-.agent-panel-hdr{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.agent-panel-hdr{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;min-height:45px}
 .agent-tabs{display:flex;border-bottom:1px solid var(--border)}
 .agent-tab{padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent}
 .agent-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
@@ -166,7 +166,7 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
   </div>
 </div>
 <script>
-var ws,convId='',streaming=false,streamEl=null;
+var ws,convId='',streaming=false,streamEl=null,viewingTaskId=null;
 var msgs=document.getElementById('messages'),input=document.getElementById('input');
 
 function connect(){
@@ -198,15 +198,18 @@ function handle(d){
       if(d.toolCall&&d.toolCall.name==='orchestrate'){try{var args=JSON.parse(d.toolCall.arguments||'{}');if(args.stages)renderOrchestrate(args.stages)}catch(e){}}
       var strip=document.getElementById('tool-strip-active');
       if(!strip){strip=document.createElement('div');strip.className='tool-strip';strip.id='tool-strip-active';if(streamEl)streamEl.parentNode.insertBefore(strip,streamEl)}
+      var chipId='tc-'+(d.toolCall.id||'')+(window._tcCounter=(window._tcCounter||0)+1);
       var chip=document.createElement('span');
-      chip.className='tool-chip running';chip.id='tc-'+d.toolCall.id;
-      chip.textContent=d.toolCall.name;
+      chip.className='tool-chip running';chip.id=chipId;chip.dataset.tcid=d.toolCall.id;
+      var shortArgs='';try{var a=JSON.parse(d.toolCall.arguments||'{}');shortArgs=a.command||a.path||a.query||a.action||''}catch(e){}
+      chip.textContent=d.toolCall.name+(shortArgs?' '+shortArgs.slice(0,30):'');
       chip.onclick=function(){var det=this.querySelector('.tool-detail');if(det)det.classList.toggle('open')};
       strip.appendChild(chip);
       break;
     case 'stream.tool_result':
       if(d.toolCallId&&document.getElementById('orchStages')){updateOrchestrate(d.result)}
-      var tcel=document.getElementById('tc-'+d.toolCallId);
+      var chips=document.querySelectorAll('[data-tcid="'+d.toolCallId+'"].running');
+      var tcel=chips.length?chips[chips.length-1]:document.getElementById('tc-'+d.toolCallId);
       if(tcel){
         tcel.className='tool-chip '+(d.isError?'error':'done');
         var det=document.createElement('div');det.className='tool-detail';det.textContent=d.result;
@@ -236,7 +239,7 @@ function handle(d){
       if(viewingTaskId===d.taskId)appendTaskEvent(d.event);
       break;
     case 'agent.status':
-      if(viewingTaskId===d.taskId){var el=document.getElementById('taskLog');if(el){var div=document.createElement('div');div.style.cssText='margin-top:8px;padding:6px;border:1px solid var(--border);border-radius:4px;font-weight:500';div.textContent='Status: '+d.status;el.appendChild(div)}}
+      if(viewingTaskId===d.taskId)renderTaskResult(d.status,d.result);
       break;
     case 'stream.error':
       addMsg('system',d.error);streaming=false;streamEl=null;
@@ -358,29 +361,189 @@ function updateTitleModel(m){
   if(el)el.textContent=short?" · "+short:"";
 }
 
-function renderOrchestrate(stages){
-  var el=document.createElement('div');
-  el.id='orchStages';el.style.cssText='margin:8px 0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px';
-  el.innerHTML='<div style="font-weight:500;margin-bottom:6px">Orchestrating '+stages.length+' stages</div>'+stages.map(function(s){
-    var deps=s.depends_on&&s.depends_on.length?' (after: '+s.depends_on.join(', ')+')':'';
-    return '<div class="orch-stage" data-name="'+escHtml(s.name)+'" style="display:flex;align-items:center;gap:6px;padding:3px 0"><span class="orch-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span><span>'+escHtml(s.name)+'</span><span style="color:var(--text2);font-size:11px">'+escHtml(s.agent||'default')+deps+'</span></div>';
-  }).join('');
-  if(streamEl)streamEl.parentNode.insertBefore(el,streamEl);
-  else msgs.appendChild(el);
+// === Agent Panel (clean port from agentx) ===
+var agentPanelTab='monitor';
+
+function collapseSidebar(){
+  document.querySelector('.sidebar').classList.add('collapsed');
+  document.getElementById('expandBtn').style.display='inline-block';
 }
-function updateOrchestrate(text){
-  if(!text)return;
-  var el=document.getElementById('orchStages');if(!el)return;
-  var m=text.match(/\[(.+?)\] (started|completed)/);
-  if(!m)return;
-  var name=m[1],status=m[2];
-  var stage=el.querySelector('[data-name="'+name+'"]');
-  if(!stage)return;
-  var dot=stage.querySelector('.orch-dot');
-  if(status==='started'){dot.style.background='var(--primary)'}
-  else if(status==='completed'){dot.style.background='var(--green)'}
+function expandSidebar(){
+  document.querySelector('.sidebar').classList.remove('collapsed');
+  document.getElementById('expandBtn').style.display='none';
+}
+function toggleSidebar(){
+  document.querySelector('.sidebar').classList.toggle('open');
+}
+function toggleAgentPanel(){
+  var p=document.getElementById('agentPanel');
+  p.classList.toggle('open');
+  if(p.classList.contains('open'))refreshAgentPanel();
+}
+function agentTab(name,el){
+  agentPanelTab=name;
+  document.querySelectorAll('.agent-tab').forEach(function(t){t.classList.remove('active')});
+  if(el)el.classList.add('active');
+  refreshAgentPanel();
+}
+function refreshAgentPanel(){
+  if(agentPanelTab==='monitor')renderMonitor();
+  else if(agentPanelTab==='spawn')renderSpawn();
+  else if(agentPanelTab==='roster')renderRoster();
 }
 
+// --- Monitor ---
+async function renderMonitor(){
+  var body=document.getElementById('agentBody');
+  var r=await fetch('/api/agents/tasks',{headers:authHeaders()});
+  var tasks=await r.json();
+  if(!tasks.length){body.innerHTML='<div style="color:var(--text2);padding:20px;text-align:center">No tasks</div>';return}
+  body.innerHTML=tasks.map(function(t){
+    var elapsed='';if(t.startedAt){var s=Math.floor((Date.now()-t.startedAt)/1000);elapsed=Math.floor(s/60)+':'+(('0'+(s%60)).slice(-2))}
+    var statusColor=t.status==='running'?'var(--primary)':t.status==='done'?'var(--green)':'var(--red)';
+    return '<div class="task-item" onclick="viewTaskDetail(\''+t.id+'\')" style="cursor:pointer">'+
+      '<div style="display:flex;justify-content:space-between"><span style="font-weight:500;font-size:12px">'+escHtml(t.agent||'default')+'</span><span style="font-size:11px;color:'+statusColor+'">'+t.status+' '+elapsed+'</span></div>'+
+      '<div style="font-size:11px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(t.desc)+'</div>'+
+      (t.status==='running'?'<button class="msg-act" style="margin-top:4px" onclick="event.stopPropagation();cancelTask(\''+t.id+'\')">Cancel</button>':'')+
+      '</div>';
+  }).join('');
+  if(tasks.some(function(t){return t.status==='running'}))setTimeout(function(){if(agentPanelTab==='monitor'&&!viewingTaskId)renderMonitor()},3000);
+}
+function cancelTask(id){
+  fetch('/api/agents/cancel/'+id,{method:'POST',headers:authHeaders()}).then(renderMonitor);
+}
+async function viewTaskDetail(id){
+  viewingTaskId=id;
+  var body=document.getElementById('agentBody');
+  body.innerHTML='<div style="margin-bottom:8px"><button class="msg-act" onclick="viewingTaskId=null;renderMonitor()">Back</button></div><div id="taskLog" style="font-size:12px;overflow-y:auto;max-height:calc(100vh - 200px)"></div>';
+  var r=await fetch('/api/agents/tasks/'+id+'/log',{headers:authHeaders()});
+  var log=await r.json();
+  var el=document.getElementById('taskLog');
+  log.forEach(function(ev){
+    if(!ev.text)return;
+    var div=document.createElement('div');
+    div.style.cssText='padding:3px 0;border-bottom:1px solid var(--border);';
+    if(ev.type==='delta')div.innerHTML='<span style="color:var(--text)">'+escHtml(ev.text)+'</span>';
+    else if(ev.type==='tool_call')div.innerHTML='<span style="color:var(--primary);font-family:monospace;font-size:11px">[tool] '+escHtml(ev.text.split('(')[0])+'</span>';
+    else if(ev.type==='tool_result')return
+    else if(ev.type==='progress'){div.style.cssText+='font-size:11px;color:var(--primary)';div.textContent=ev.text}
+    else return;
+    el.appendChild(div);
+  });
+  // Show result if done
+  var r2=await fetch('/api/agents/tasks',{headers:authHeaders()});var tasks=await r2.json();
+  var t=tasks.find(function(x){return x.id===id});
+  if(t&&t.result){
+    var res=document.createElement('div');
+    res.style.cssText='margin-top:8px;padding:8px;border:1px solid '+(t.status==='done'?'var(--green)':'var(--red)')+';border-radius:6px';
+    res.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong style="color:'+(t.status==='done'?'var(--green)':'var(--red)')+'">'+t.status.toUpperCase()+'</strong><button class="msg-act" onclick="navigator.clipboard.writeText(this.parentNode.nextElementSibling.textContent);this.textContent=\'Copied!\';setTimeout(function(){this.textContent=\'Copy\'},1500)">Copy</button></div><div style="font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:var(--card);padding:6px;border-radius:4px">'+escHtml(t.result)+'</div>';
+    el.appendChild(res);
+  }
+  el.scrollTop=el.scrollHeight;
+  // Subscribe for live updates
+  if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'agent.subscribe',taskId:id}));
+}
+
+// --- Spawn ---
+async function renderSpawn(){
+  var body=document.getElementById('agentBody');
+  var r=await fetch('/api/agents/roster',{headers:authHeaders()});
+  var roster=await r.json();
+  body.innerHTML='<div class="field"><label for="spawnAgent">Agent</label><select id="spawnAgent" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px">'+
+    roster.map(function(a){return '<option value="'+escHtml(a.name)+'">'+escHtml(a.name)+'</option>'}).join('')+
+    '</select></div>'+
+    '<div class="field"><label for="spawnTask">Task</label><textarea id="spawnTask" rows="4" placeholder="Describe the task..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical"></textarea></div>'+
+    '<button class="btn-primary" style="width:100%" onclick="doSpawn()">Spawn</button>';
+}
+async function doSpawn(){
+  var agent=document.getElementById('spawnAgent').value;
+  var task=document.getElementById('spawnTask').value;
+  if(!task)return;
+  await fetch('/api/agents/spawn',{method:'POST',headers:authHeaders(),body:JSON.stringify({agent:agent,task:task})});
+  document.getElementById('spawnTask').value='';
+  agentPanelTab='monitor';refreshAgentPanel();
+  document.querySelectorAll('.agent-tab').forEach(function(t){t.classList.toggle('active',t.textContent==='Monitor')});
+}
+
+// --- Roster ---
+var editingAgent=null;
+async function renderRoster(){
+  if(editingAgent){renderAgentEditor();return}
+  var body=document.getElementById('agentBody');
+  var r=await fetch('/api/agents/roster',{headers:authHeaders()});
+  var roster=await r.json();
+  body.innerHTML=roster.map(function(a){
+    return '<div class="roster-item"><div style="flex:1;min-width:0"><div class="roster-name">'+escHtml(a.name)+'</div><div class="roster-desc">'+escHtml((a.model||'default')+' · '+(a.systemPrompt||'').slice(0,40))+'</div></div>'+
+      '<div style="display:flex;gap:3px"><button class="msg-act" onclick="editAgent(\''+escHtml(a.name)+'\')">Edit</button><button class="msg-act" onclick="handoffTo(\''+escHtml(a.name)+'\')">Use</button><button class="msg-act" onclick="deleteAgent(\''+escHtml(a.name)+'\')">Del</button></div></div>';
+  }).join('')+'<button class="btn-primary" style="width:100%;margin-top:8px" onclick="newAgent()">+ Add Agent</button>';
+}
+async function editAgent(name){
+  var r=await fetch('/api/agents/roster',{headers:authHeaders()});var roster=await r.json();
+  editingAgent=roster.find(function(a){return a.name===name})||{name:name};
+  renderAgentEditor();
+}
+async function renderAgentEditor(){
+  var a=editingAgent;var body=document.getElementById('agentBody');
+  var r=await fetch('/api/models',{headers:authHeaders()});var models=await r.json();
+  var r2=await fetch('/api/tools',{headers:authHeaders()});var tools=await r2.json();
+  body.innerHTML='<div style="margin-bottom:8px"><button class="msg-act" onclick="editingAgent=null;renderRoster()">Back</button> <strong>'+escHtml(a.name)+'</strong></div>'+
+    '<div class="field"><label for="ae_model">Model</label><select id="ae_model" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px"><option value="">(default)</option>'+models.map(function(m){return '<option value="'+m+'"'+(m===a.model?' selected':'')+'>'+m+'</option>'}).join('')+'</select></div>'+
+    '<div class="field"><label for="ae_temp">Temperature: <span id="ae_temp_val">'+(a.temperature||0.7).toFixed(1)+'</span></label><input type="range" id="ae_temp" min="0" max="2" step="0.1" value="'+(a.temperature||0.7)+'" oninput="document.getElementById(\'ae_temp_val\').textContent=this.value" style="width:100%"></div>'+
+    '<div class="field"><label for="ae_topp">Top P: <span id="ae_topp_val">'+(a.topP||0.9).toFixed(2)+'</span></label><input type="range" id="ae_topp" min="0" max="1" step="0.05" value="'+(a.topP||0.9)+'" oninput="document.getElementById(\'ae_topp_val\').textContent=this.value" style="width:100%"></div>'+
+    '<div class="field"><label>Tools</label><div style="max-height:80px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:4px">'+tools.map(function(t){return '<label style="display:block;font-size:11px;padding:1px"><input type="checkbox" class="ae_tool" value="'+t.name+'"'+((a.tools||[]).indexOf(t.name)!==-1?' checked':'')+'>'+t.name+'</label>'}).join('')+'</div></div>'+
+    '<div class="field"><label for="ae_prompt">System Prompt</label><textarea id="ae_prompt" style="width:100%;min-height:120px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:monospace;font-size:11px;resize:vertical">'+(a.systemPrompt||'')+'</textarea></div>'+
+    '<button class="btn-primary" style="width:100%" onclick="saveAgentEditor()">Save</button>';
+}
+function saveAgentEditor(){
+  editingAgent.model=document.getElementById('ae_model').value;
+  editingAgent.temperature=parseFloat(document.getElementById('ae_temp').value);
+  editingAgent.topP=parseFloat(document.getElementById('ae_topp').value);
+  editingAgent.systemPrompt=document.getElementById('ae_prompt').value;
+  editingAgent.tools=Array.from(document.querySelectorAll('.ae_tool:checked')).map(function(c){return c.value});
+  fetch('/api/agents/roster',{method:'POST',headers:authHeaders(),body:JSON.stringify(editingAgent)}).then(function(){editingAgent=null;renderRoster()});
+}
+function newAgent(){
+  var name=prompt('Agent name:');if(!name)return;
+  editingAgent={name:name,systemPrompt:'',temperature:0.7,topP:0.9,tools:[]};
+  renderAgentEditor();
+}
+function deleteAgent(name){
+  if(!confirm('Delete '+name+'?'))return;
+  fetch('/api/agents/roster/'+encodeURIComponent(name),{method:'DELETE',headers:authHeaders()}).then(renderRoster);
+}
+
+// --- Handoff ---
+var activeHandoff=null;
+async function handoffTo(name){
+  var r=await fetch('/api/agents/handoff',{method:'POST',headers:authHeaders(),body:JSON.stringify({agent:name})});
+  if(r.ok){activeHandoff=name;updateHandoffUI()}
+}
+async function returnHandoff(){
+  await fetch('/api/agents/return',{method:'POST',headers:authHeaders()});
+  activeHandoff=null;updateHandoffUI();
+}
+function updateHandoffUI(){
+  var el=document.getElementById('activeModel');
+  if(activeHandoff){el.textContent=' ['+activeHandoff+']';var rb=document.getElementById('returnBtn');if(!rb){rb=document.createElement('button');rb.id='returnBtn';rb.className='msg-act';rb.style.cssText='margin-left:6px;color:var(--red)';rb.textContent='Return';rb.onclick=returnHandoff;el.parentNode.appendChild(rb)}}
+  else{var rb=document.getElementById('returnBtn');if(rb)rb.remove();loadModels()}
+}
+
+// --- Orchestrate visualization ---
+function renderOrchestrate(stages){
+  var el=document.createElement('div');el.id='orchStages';
+  el.style.cssText='margin:8px 0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px';
+  el.innerHTML='<div style="font-weight:500;margin-bottom:4px">Pipeline: '+stages.length+' stages</div>'+stages.map(function(s){
+    var deps=s.depends_on&&s.depends_on.length?' → after '+s.depends_on.join(', '):'';
+    return '<div class="orch-stage" data-name="'+escHtml(s.name)+'" style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0" class="orch-dot"></span><span>'+escHtml(s.name)+'</span><span style="color:var(--text2);font-size:11px">'+escHtml(s.agent||'default')+deps+'</span></div>';
+  }).join('');
+  if(streamEl)streamEl.parentNode.insertBefore(el,streamEl);else msgs.appendChild(el);
+}
+function updateOrchestrate(text){
+  if(!text)return;var el=document.getElementById('orchStages');if(!el)return;
+  var m=text.match(/\[(.+?)\] (started|completed)/);if(!m)return;
+  var dot=el.querySelector('[data-name="'+m[1]+'"] .orch-dot');
+  if(dot)dot.style.background=m[2]==='started'?'var(--primary)':'var(--green)';
+}
 function addCopyButtons(){
   document.querySelectorAll('.msg-assistant pre').forEach(function(pre){
     if(pre.querySelector('.copy-btn'))return;
@@ -395,206 +558,34 @@ function addCopyButtons(){
   });
 }
 
-// Image paste/drop support
+var pendingImages=[];
 function setupImageInput(){
   var inputEl=document.getElementById('input');
   inputEl.addEventListener('paste',function(e){
-    var items=e.clipboardData?.items;
-    if(!items)return;
+    var items=e.clipboardData?.items;if(!items)return;
     for(var i=0;i<items.length;i++){
-      if(items[i].type.indexOf('image')!==-1){
-        var file=items[i].getAsFile();
-        attachImage(file);
-        e.preventDefault();
-        break;
-      }
+      if(items[i].type.indexOf('image')!==-1){attachImage(items[i].getAsFile());e.preventDefault();break}
     }
   });
   inputEl.addEventListener('dragover',function(e){e.preventDefault()});
   inputEl.addEventListener('drop',function(e){
-    e.preventDefault();
-    var files=e.dataTransfer?.files;
-    if(!files)return;
-    for(var i=0;i<files.length;i++){
-      if(files[i].type.indexOf('image')!==-1)attachImage(files[i]);
-    }
+    e.preventDefault();var files=e.dataTransfer?.files;if(!files)return;
+    for(var i=0;i<files.length;i++){if(files[i].type.indexOf('image')!==-1)attachImage(files[i])}
   });
 }
-var pendingImages=[];
 function attachImage(file){
   var reader=new FileReader();
-  reader.onload=function(){
-    pendingImages.push(reader.result);
-    updateImagePreview();
-  };
+  reader.onload=function(){pendingImages.push(reader.result);updateImagePreview()};
   reader.readAsDataURL(file);
 }
 function updateImagePreview(){
   var preview=document.getElementById('imagePreview');
-  if(!preview){
-    preview=document.createElement('div');
-    preview.id='imagePreview';
-    preview.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px';
-    document.querySelector('.mode-pills').after(preview);
-  }
-  preview.innerHTML=pendingImages.map(function(src,i){
-    return '<div style="position:relative"><img src="'+src+'" style="height:48px;border-radius:4px"><button style="position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;line-height:16px" onclick="removeImage('+i+')">x</button></div>';
-  }).join('');
+  if(!preview){preview=document.createElement('div');preview.id='imagePreview';preview.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px';document.querySelector('.mode-pills').after(preview)}
+  preview.innerHTML=pendingImages.map(function(src,i){return '<div style="position:relative"><img src="'+src+'" style="height:48px;border-radius:4px"><button style="position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer" onclick="removeImage('+i+')">x</button></div>'}).join('');
   preview.style.display=pendingImages.length?'flex':'none';
 }
 function removeImage(i){pendingImages.splice(i,1);updateImagePreview()}
 
-function toggleSidebar(){
-  document.querySelector('.sidebar').classList.toggle('open');
-}
-function collapseSidebar(){
-  document.querySelector('.sidebar').classList.add('collapsed');
-  document.getElementById('expandBtn').style.display='inline-block';
-}
-function expandSidebar(){
-  document.querySelector('.sidebar').classList.remove('collapsed');
-  document.getElementById('expandBtn').style.display='none';
-}
-
-function toggleAgentPanel(){
-  document.getElementById('agentPanel').classList.toggle('open');
-  if(document.getElementById('agentPanel').classList.contains('open'))agentTab('monitor');
-}
-function agentTab(name,el){
-  document.querySelectorAll('.agent-tab').forEach(function(t){t.classList.remove('active')});
-  if(el)el.classList.add('active');
-  else document.querySelector('.agent-tab').classList.add('active');
-  if(name==='monitor')renderAgentMonitor();
-  else if(name==='spawn')renderAgentSpawn();
-  else if(name==='roster')renderAgentRoster();
-}
-async function renderAgentMonitor(){
-  var body=document.getElementById('agentBody');
-  var r=await fetch('/api/agents/tasks',{headers:authHeaders()});
-  var tasks=await r.json();
-  if(!tasks.length){body.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">No active tasks</div>';return}
-  body.innerHTML=tasks.map(function(t){
-    return '<div class="task-item" style="cursor:pointer" onclick="viewTask(\''+t.id+'\')"><div style="display:flex;justify-content:space-between"><span class="task-name">'+escHtml(t.agent)+'</span><span class="task-status '+t.status+'">'+t.status+'</span></div><div style="font-size:11px;color:var(--text2);margin-top:4px">'+escHtml(t.desc)+'</div>'+(t.status==='running'?'<button class="msg-act" style="margin-top:4px" onclick="cancelTask(\''+t.id+'\')">Cancel</button>':'')+(t.result?'<div style="font-size:11px;margin-top:4px;padding:4px 6px;background:var(--card);border-radius:4px;max-height:80px;overflow-y:auto;white-space:pre-wrap">'+escHtml(t.result)+'</div>':'')+'</div>';
-  }).join('');
-}
-async function renderAgentSpawn(){
-  var body=document.getElementById('agentBody');
-  var r=await fetch('/api/agents/roster',{headers:authHeaders()});
-  var roster=await r.json();
-  body.innerHTML='<div class="field"><label>Agent</label><select id="spawnAgent" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px">'+
-    roster.map(function(a){return '<option value="'+escHtml(a.name)+'">'+escHtml(a.name)+'</option>'}).join('')+
-    '</select></div><div class="field"><label>Task</label><textarea id="spawnTask" rows="3" placeholder="Describe the task..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical"></textarea></div><button class="btn-primary" onclick="doSpawn()">Spawn Agent</button>';
-}
-async function doSpawn(){
-  var agent=document.getElementById('spawnAgent').value;
-  var task=document.getElementById('spawnTask').value;
-  if(!task)return;
-  await fetch('/api/agents/spawn',{method:'POST',headers:authHeaders(),body:JSON.stringify({agent:agent,task:task})});
-  document.getElementById('spawnTask').value='';
-  agentTab('monitor');
-}
-function cancelTask(id){
-  fetch('/api/agents/cancel/'+id,{method:'POST',headers:authHeaders()}).then(function(){renderAgentMonitor()});
-}
-function viewTask(id){
-  viewingTaskId=id;
-  renderTaskDetail();
-  // Subscribe to live events
-  if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'agent.subscribe',taskId:id}));
-}
-function renderTaskDetail(){
-  if(!viewingTaskId){renderAgentMonitor();return}
-  var body=document.getElementById('agentBody');
-  body.innerHTML='<div style="margin-bottom:8px"><button class="msg-act" onclick="viewingTaskId=null;renderAgentMonitor()">Back</button></div><div id="taskLog" style="font-size:12px;overflow-y:auto;max-height:calc(100vh - 200px)"></div>';
-  // Fetch existing log
-  fetch('/api/agents/tasks/'+viewingTaskId+'/log',{headers:authHeaders()}).then(function(r){return r.json()}).then(function(log){
-    var el=document.getElementById('taskLog');if(!el)return;
-    log.forEach(function(ev){appendTaskEvent(ev)});
-  });
-}
-function appendTaskEvent(ev){
-  var el=document.getElementById('taskLog');if(!el)return;
-  var div=document.createElement('div');
-  div.style.cssText='margin-bottom:4px;padding:4px 6px;border-radius:4px;';
-  if(ev.type==='delta'){div.style.background='var(--card)';div.textContent=ev.text}
-  else if(ev.type==='tool_call'){div.style.color='var(--primary)';div.textContent='[tool] '+ev.text}
-  else if(ev.type==='tool_result'){div.style.color='var(--text2)';div.style.fontSize='11px';div.textContent=ev.text.slice(0,200)}
-  else{div.style.color='var(--text2)';div.textContent='['+ev.type+'] '+ev.text}
-  el.appendChild(div);
-  el.scrollTop=el.scrollHeight;
-}
-var editingAgent=null;
-var viewingTaskId=null;
-async function renderAgentRoster(){
-  var body=document.getElementById("agentBody");
-  if(editingAgent){renderAgentDetail();return}
-  var r=await fetch("/api/agents/roster",{headers:authHeaders()});
-  var roster=await r.json();
-  var html=roster.map(function(a){
-    return '<div class="roster-item" onclick="openAgentDetail(this.dataset.name)" data-name="'+escHtml(a.name)+'"><div><div class="roster-name">'+escHtml(a.name)+'</div><div class="roster-desc">'+escHtml((a.model||'default')+' . '+(a.systemPrompt||'').slice(0,40))+'</div></div><button class="msg-act" onclick="event.stopPropagation();handoffTo(this.parentNode.parentNode.dataset.name)">Handoff</button><button class="msg-act" onclick="event.stopPropagation();deleteRosterAgent(this.parentNode.dataset.name)">Del</button></div>';
-  }).join("");
-  html+='<button class="btn-primary" style="margin-top:8px;width:100%" onclick="addRosterAgent()">+ Add Agent</button>';
-  body.innerHTML=html;
-}
-async function openAgentDetail(name){
-  var r=await fetch('/api/agents/roster',{headers:authHeaders()});
-  var roster=await r.json();
-  editingAgent=roster.find(function(a){return a.name===name})||{name:name};
-  renderAgentDetail();
-}
-async function renderAgentDetail(){
-  var a=editingAgent;if(!a){renderAgentRoster();return}
-  var body=document.getElementById('agentBody');
-  var r=await fetch('/api/models',{headers:authHeaders()});var models=await r.json();
-  var r2=await fetch('/api/tools',{headers:authHeaders()});var tools=await r2.json();
-  var html='<div style="margin-bottom:8px"><button class="msg-act" onclick="editingAgent=null;renderAgentRoster()">Back</button> <strong>'+escHtml(a.name)+'</strong></div>';
-  html+='<div class="field"><label>Model</label><select onchange="editingAgent.model=this.value;saveAgent()" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px"><option value="">(default)</option>'+models.map(function(m){return '<option value="'+m+'"'+(m===a.model?' selected':'')+'>'+m+'</option>'}).join('')+'</select></div>';
-  html+='<div class="field"><label>Temperature ('+(a.temperature||0.7).toFixed(1)+')</label><input type="range" min="0" max="2" step="0.1" value="'+(a.temperature||0.7)+'" oninput="editingAgent.temperature=parseFloat(this.value);this.parentNode.querySelector(\'label\').textContent=\'Temperature (\'+this.value+\')\';saveAgent()" style="width:100%"></div>';
-  html+='<div class="field"><label>Top P ('+(a.topP||0.9).toFixed(2)+')</label><input type="range" min="0" max="1" step="0.05" value="'+(a.topP||0.9)+'" oninput="editingAgent.topP=parseFloat(this.value);this.parentNode.querySelector(\'label\').textContent=\'Top P (\'+this.value+\')\';saveAgent()" style="width:100%"></div>';
-  html+='<div class="field"><label>Top K</label><input type="number" value="'+(a.topK||0)+'" onchange="editingAgent.topK=parseInt(this.value);saveAgent()" style="width:80px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px"></div>';
-  html+='<div class="field"><label>Max Context</label><input type="number" value="'+(a.contextTokens||32000)+'" onchange="editingAgent.contextTokens=parseInt(this.value);saveAgent()" style="width:100px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px"></div>';
-  var toolHtml=tools.map(function(t){var ck=(a.tools||[]).indexOf(t.name)!==-1;return '<label style="display:block;font-size:11px;padding:2px"><input type="checkbox"'+(ck?' checked':'')+' onchange="toggleAgentTool(\''+t.name+'\')"> '+t.name+'</label>'}).join('');
-  html+='<div class="field"><label>Tools</label><div style="max-height:100px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:4px">'+toolHtml+'</div></div>';
-  html+='<div class="field"><label>System Prompt</label><textarea onchange="editingAgent.systemPrompt=this.value;saveAgent()" style="width:100%;min-height:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:monospace;font-size:12px;resize:vertical">'+(a.systemPrompt||'')+'</textarea></div>';
-  body.innerHTML=html;
-}
-function toggleAgentTool(name){
-  if(!editingAgent.tools)editingAgent.tools=[];
-  var idx=editingAgent.tools.indexOf(name);
-  if(idx===-1)editingAgent.tools.push(name);else editingAgent.tools.splice(idx,1);
-  saveAgent();
-}
-function saveAgent(){
-  if(!editingAgent)return;
-  fetch('/api/agents/roster',{method:'POST',headers:authHeaders(),body:JSON.stringify(editingAgent)});
-}
-function addRosterAgent(){
-  var name=prompt('Agent name:');if(!name)return;
-  editingAgent={name:name,systemPrompt:'',temperature:0.7,topP:0.9,topK:0,contextTokens:32000,tools:[]};
-  renderAgentDetail();
-}
-function deleteRosterAgent(name){
-  if(!confirm('Delete agent: '+name+'?'))return;
-  fetch('/api/agents/roster/'+encodeURIComponent(name),{method:'DELETE',headers:authHeaders()}).then(function(){renderAgentRoster()});
-}
-
-var activeHandoff=null;
-async function handoffTo(name){
-  var r=await fetch('/api/agents/handoff',{method:'POST',headers:authHeaders(),body:JSON.stringify({agent:name})});
-  if(r.ok){activeHandoff=name;updateHandoffUI()}
-}
-async function returnHandoff(){
-  await fetch('/api/agents/return',{method:'POST',headers:authHeaders()});
-  activeHandoff=null;updateHandoffUI();
-}
-function updateHandoffUI(){
-  var el=document.getElementById('activeModel');
-  if(activeHandoff){el.textContent=' ['+activeHandoff+']'}
-  else{loadModels()}
-  var rb=document.getElementById('returnBtn');
-  if(activeHandoff){if(!rb){rb=document.createElement('button');rb.id='returnBtn';rb.className='msg-act';rb.style.cssText='margin-left:8px;color:var(--red)';rb.textContent='Return';rb.onclick=returnHandoff;el.parentNode.appendChild(rb)}}
-  else{if(rb)rb.remove()}
-}
 
 var mode='chat';
 var authToken=localStorage.getItem('ax_token')||'';
@@ -640,7 +631,7 @@ async function renderProviderSettings(){
   var settings=await r2.json();
   var currentModel=settings.selected_model||'';
 
-  var html='<div class="field"><label>Active Model</label><select id="prov_model" onchange="setModel(this.value)" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px">';
+  var html='<div class="field"><label for="prov_model">Active Model</label><select id="prov_model" onchange="setModel(this.value)" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px">';
   var r3=await fetch('/api/models',{headers:authHeaders()});
   var models=await r3.json();
   html+=models.map(function(m){return '<option value="'+m+'"'+(m===currentModel?' selected':'')+'>'+m+'</option>'}).join('');

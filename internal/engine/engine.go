@@ -163,6 +163,24 @@ var toolDefs = []map[string]any{
 			},
 		},
 	},
+	{
+		"type": "function",
+		"function": map[string]any{
+			"name":        "task_plan",
+			"description": "Manage a visible task plan. Use to show the user your progress on multi-step work. Actions: create (make a plan), complete (mark step done), update (add context to a step).",
+			"parameters": map[string]any{
+				"type":     "object",
+				"required": []string{"action"},
+				"properties": map[string]any{
+					"action":      map[string]string{"type": "string", "description": "create, complete, or update"},
+					"description": map[string]string{"type": "string", "description": "Brief plan description (for create)"},
+					"tasks":       map[string]any{"type": "array", "description": "Array of task strings (for create)", "items": map[string]string{"type": "string"}},
+					"task_id":     map[string]string{"type": "string", "description": "Task ID to complete or update (1-based index)"},
+					"context":     map[string]string{"type": "string", "description": "Context or notes (for update/complete)"},
+				},
+			},
+		},
+	},
 }
 
 func (e *Engine) SelectedModel() string {

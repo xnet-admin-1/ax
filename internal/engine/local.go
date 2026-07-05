@@ -242,6 +242,29 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			return
 		}
 		if len(toolCalls) == 0 {
+			// Detect text-mode tool calls (model outputs JSON instead of using function calling)
+			if parsed := detectTextToolCalls(content); len(parsed) > 0 {
+				for _, tc := range parsed {
+					ch <- Event{Type: "tool_call", Tool: tc.name, ToolName: tc.name, ToolArgs: tc.argsRaw}
+					result, err := llm.ExecuteTool(tc.name, tc.args, &llm.ToolContext{
+						ShellOutputLimit:  8000,
+						FileReadLimit:     32000,
+						TrustAll:          l.TrustAll,
+						SearchProviderURL: "https://search.xnet.ngo",
+						OnProgress: func(name, chunk string) {
+							ch <- Event{Type: "progress", ToolName: name, ToolResult: chunk}
+						},
+					})
+					if err != nil {
+						result = "error: " + err.Error()
+					}
+					ch <- Event{Type: "tool_result", Tool: tc.name, ToolName: tc.name, ToolResult: result}
+					messages = append(messages, Message{Role: "assistant", Content: content})
+					messages = append(messages, Message{Role: "tool", Content: result, Name: tc.name, ToolCallID: tc.name})
+				}
+				content = ""
+				continue
+			}
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", content, time.Now().Unix())
 			// Auto-title: if this is the first assistant response in a new conversation
 			l.maybeAutoTitle(convID, apiBase, apiKey, model, ch)
@@ -656,4 +679,56 @@ func (l *Local) GetAgentManager() interface{} {
 		l.AgentMgr = agent.NewManager(l.DB, l.Gateway)
 	}
 	return l.AgentMgr
+}
+
+// detectTextToolCalls finds tool calls output as text by models that don't support function calling.
+// Handles formats:
+// - [TOOL_CALLS]toolname{json} (Mistral)
+// - {"name": "toolname", "parameters": {...}} (generic)
+type textToolCall struct {
+	name    string
+	args    map[string]any
+	argsRaw string
+}
+
+func detectTextToolCalls(content string) []textToolCall {
+	var found []textToolCall
+
+	// Format 1: [TOOL_CALLS]toolname{json}
+	if idx := strings.Index(content, "[TOOL_CALLS]"); idx >= 0 {
+		rest := content[idx+12:]
+		// Find tool name (everything before the first {)
+		braceIdx := strings.Index(rest, "{")
+		if braceIdx > 0 {
+			name := strings.TrimSpace(rest[:braceIdx])
+			argsStr := rest[braceIdx:]
+			var args map[string]any
+			if json.Unmarshal([]byte(argsStr), &args) == nil {
+				found = append(found, textToolCall{name: name, args: args, argsRaw: argsStr})
+			}
+		}
+	}
+
+	// Format 2: JSON objects with "name" and "parameters" on a line
+	if len(found) == 0 {
+		for _, line := range strings.Split(content, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "{") && strings.Contains(line, `"name"`) && (strings.Contains(line, `"parameters"`) || strings.Contains(line, `"parameter"`)) {
+				var tc struct {
+					Name       string         `json:"name"`
+					Parameters map[string]any `json:"parameters"`
+					Parameter  map[string]any `json:"parameter"`
+				}
+				if json.Unmarshal([]byte(line), &tc) == nil && tc.Name != "" {
+					args := tc.Parameters
+					if args == nil {
+						args = tc.Parameter
+					}
+					found = append(found, textToolCall{name: tc.Name, args: args, argsRaw: line})
+				}
+			}
+		}
+	}
+
+	return found
 }
