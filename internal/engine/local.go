@@ -24,8 +24,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xnet-admin-1/ax/internal/gateway"
 	"github.com/xnet-admin-1/ax/internal/agent"
+	"github.com/xnet-admin-1/ax/internal/gateway"
 	"github.com/xnet-admin-1/ax/internal/mcp"
 	"github.com/xnet-admin-1/ax/internal/llm"
 )
@@ -246,7 +246,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			if parsed := detectTextToolCalls(content); len(parsed) > 0 {
 				for _, tc := range parsed {
 					ch <- Event{Type: "tool_call", Tool: tc.name, ToolName: tc.name, ToolArgs: tc.argsRaw}
-					result, err := llm.ExecuteTool(tc.name, tc.args, &llm.ToolContext{
+					textToolCtx := &llm.ToolContext{
 						ShellOutputLimit:  8000,
 						FileReadLimit:     32000,
 						TrustAll:          l.TrustAll,
@@ -254,24 +254,31 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 						OnProgress: func(name, chunk string) {
 							ch <- Event{Type: "progress", ToolName: name, ToolResult: chunk}
 						},
-					})
+					}
+					if l.McpMgr != nil {
+						textToolCtx.McpExecutor = l.McpMgr.ExecuteTool
+						textToolCtx.McpInstaller = l.McpMgr.InstallTool
+					}
+					result, err := llm.ExecuteTool(tc.name, tc.args, textToolCtx)
 					if err != nil {
 						result = "error: " + err.Error()
 					}
 					ch <- Event{Type: "tool_result", Tool: tc.name, ToolName: tc.name, ToolResult: result}
 					messages = append(messages, Message{Role: "assistant", Content: content})
-					messages = append(messages, Message{Role: "tool", Content: result, Name: tc.name, ToolCallID: tc.name})
+					messages = append(messages, Message{Role: "tool", Content: truncateToolResult(result), Name: tc.name, ToolCallID: tc.name})
 				}
 				content = ""
 				continue
 			}
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", content, time.Now().Unix())
 			// Auto-title: if this is the first assistant response in a new conversation
-			l.maybeAutoTitle(convID, apiBase, apiKey, model, ch)
+			if content != "" {
+				l.maybeAutoTitle(convID, apiBase, apiKey, model, ch)
+			}
 			ch <- Event{Type: "end", Tokens: tokens}
 			return
 		}
-		messages = append(messages, Message{Role: "assistant", ToolCalls: toolCalls})
+		messages = append(messages, Message{Role: "assistant", Content: content, ToolCalls: toolCalls})
 		// Persist assistant tool-call message immediately for crash recovery
 		tcJSON, _ := json.Marshal(toolCalls)
 		// Only persist assistant message if it has real content
@@ -303,6 +310,20 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			if l.AgentMgr != nil {
 				toolCtx.SpawnAgent = func(a, t string, r ...string) (string, error) { return l.AgentMgr.Spawn(a, t, r...) }
 				toolCtx.Orchestrate = func(argsJSON string) string { return l.ExecuteOrchestrate(argsJSON, ch) }
+				toolCtx.GetAgentResult = func(taskID string) (string, error) {
+					for i := 0; i < 120; i++ {
+						t := l.AgentMgr.GetTask(taskID)
+						if t == nil {
+							return "", fmt.Errorf("task %s not found", taskID)
+						}
+						if t.Status == "done" || t.Status == "error" {
+							return t.Result, nil
+						}
+						time.Sleep(time.Second)
+					}
+					return "", fmt.Errorf("timeout waiting for task %s", taskID)
+				}
+			}
 			toolCtx.SaveMemory = func(key, value string) error {
 				_, err := l.DB.Exec("INSERT OR REPLACE INTO memories(key, content) VALUES(?,?)", key, value)
 				return err
@@ -326,20 +347,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			}
 			if l.McpMgr != nil {
 				toolCtx.McpExecutor = l.McpMgr.ExecuteTool
-			}
-				toolCtx.GetAgentResult = func(taskID string) (string, error) {
-					for i := 0; i < 120; i++ {
-						t := l.AgentMgr.GetTask(taskID)
-						if t == nil {
-							return "", fmt.Errorf("task %s not found", taskID)
-						}
-						if t.Status == "done" || t.Status == "error" {
-							return t.Result, nil
-						}
-						time.Sleep(time.Second)
-					}
-					return "", fmt.Errorf("timeout waiting for task %s", taskID)
-				}
+				toolCtx.McpInstaller = l.McpMgr.InstallTool
 			}
 			var result string
 			var err error
@@ -352,8 +360,8 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 				result = "error: " + err.Error()
 			}
 			ch <- Event{Type: "tool_result", Tool: tc.ID, ToolName: tc.Function.Name, ToolResult: result}
-			messages = append(messages, Message{Role: "tool", Content: result, Name: tc.Function.Name, ToolCallID: tc.ID})
-			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", result, tc.Function.Name+"|"+tc.ID, time.Now().Unix())
+			messages = append(messages, Message{Role: "tool", Content: truncateToolResult(result), Name: tc.Function.Name, ToolCallID: tc.ID})
+			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", truncateToolResult(result), tc.Function.Name+"|"+tc.ID, time.Now().Unix())
 		}
 	}
 }
@@ -458,9 +466,13 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 					content.WriteString(delta.ReasoningContent)
 					ch <- Event{Type: "delta", Reasoning: delta.ReasoningContent}
 				}
+				if delta.Reasoning != "" {
+					content.WriteString(delta.Reasoning)
+					ch <- Event{Type: "delta", Reasoning: delta.Reasoning}
+				}
 				if delta.Content != "" {
 					content.WriteString(delta.Content)
-					// Parse <thought> tags inline - split into reasoning vs content
+					// Parse <thought>/<think>/<reasoning> tags inline
 					text := delta.Content
 					for text != "" {
 						if !inThought {
@@ -476,21 +488,31 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 								}
 								inThought = true
 								text = text[idx+7:]
+							} else if idx := strings.Index(text, "<reasoning>"); idx >= 0 {
+								if idx > 0 {
+									ch <- Event{Type: "delta", Delta: text[:idx]}
+								}
+								inThought = true
+								text = text[idx+11:]
 							} else {
 								ch <- Event{Type: "delta", Delta: text}
 								text = ""
 							}
 						} else {
 							closeIdx := strings.Index(text, "</thought>")
+							closeLen := 10
 							if closeIdx < 0 {
 								closeIdx = strings.Index(text, "</think>")
+								closeLen = 8
+							}
+							if closeIdx < 0 {
+								closeIdx = strings.Index(text, "</reasoning>")
+								closeLen = 12
 							}
 							if closeIdx >= 0 {
-								closeLen := 10 // len("</thought>")
-								if strings.HasPrefix(text[closeIdx:], "</think>") {
-									closeLen = 8
+								if closeIdx > 0 {
+									ch <- Event{Type: "delta", Reasoning: text[:closeIdx]}
 								}
-								ch <- Event{Type: "delta", Reasoning: text[:closeIdx]}
 								inThought = false
 								text = text[closeIdx+closeLen:]
 							} else {
@@ -533,6 +555,15 @@ done:
 		}
 	}
 	return content.String(), toolCalls, tokens, nil
+}
+
+const maxToolResultSize = 131072 // 128KB
+
+func truncateToolResult(s string) string {
+	if len(s) <= maxToolResultSize {
+		return s
+	}
+	return s[:maxToolResultSize] + "\n\n[truncated — " + fmt.Sprintf("%d", len(s)) + " bytes total]"
 }
 
 func (l *Local) maybeAutoTitle(convID, apiBase, apiKey, model string, ch chan Event) {
@@ -645,6 +676,34 @@ Your run_sh executes in a non-interactive shell. Be aware:
 - Capture stderr with 2>&1
 - Use timeout for long-running commands
 
+## MCP (Model Context Protocol) Servers
+You can install and use MCP servers to extend your capabilities. MCP servers provide additional tools.
+
+To install an MCP server, use the install_mcp tool:
+- action: "install", name: "server-name", command: "npx" or "uvx" or path, args: [...], env: {KEY: "val"}
+- action: "list" to see installed servers and their tools
+- action: "remove", name: "server-name" to uninstall
+- action: "reconnect", name: "server-name" to restart
+
+Common MCP servers:
+- Filesystem: npx @modelcontextprotocol/server-filesystem [dir]
+- GitHub: npx @modelcontextprotocol/server-github (env: GITHUB_TOKEN)
+- Brave Search: npx @modelcontextprotocol/server-brave-search (env: BRAVE_API_KEY)
+- Puppeteer: npx @modelcontextprotocol/server-puppeteer
+- SQLite: npx @modelcontextprotocol/server-sqlite [db-path]
+- Memory: npx @modelcontextprotocol/server-memory
+- Playwright: npx @playwright/mcp@latest
+
+Once installed, MCP tools appear alongside your built-in tools. Use them naturally.
+Config is saved to ~/.ax/mcp.json and servers auto-connect on startup.
+
+## Task Planning
+For multi-step work, use the task_plan tool to show progress:
+- action: "create" with description + tasks array
+- action: "complete" with completed_task_ids + context_update
+- action: "add" to append new tasks
+- action: "list" to show current plan
+
 ## Response Style
 - Be concise and direct
 - Show results, not process
@@ -694,9 +753,18 @@ type textToolCall struct {
 func detectTextToolCalls(content string) []textToolCall {
 	var found []textToolCall
 
+	// Strip <think>/<thought>/<reasoning> blocks — reasoning shouldn't trigger tool detection
+	stripped := regexp.MustCompile(`(?s)<think>.*?</think>`).ReplaceAllString(content, "")
+	stripped = regexp.MustCompile(`(?s)<thought>.*?</thought>`).ReplaceAllString(stripped, "")
+	stripped = regexp.MustCompile(`(?s)<reasoning>.*?</reasoning>`).ReplaceAllString(stripped, "")
+	// Also strip unclosed blocks (model was thinking but stream ended)
+	stripped = regexp.MustCompile(`(?s)<think>.*$`).ReplaceAllString(stripped, "")
+	stripped = regexp.MustCompile(`(?s)<thought>.*$`).ReplaceAllString(stripped, "")
+	stripped = regexp.MustCompile(`(?s)<reasoning>.*$`).ReplaceAllString(stripped, "")
+
 	// Format 1: [TOOL_CALLS]toolname{json}
-	if idx := strings.Index(content, "[TOOL_CALLS]"); idx >= 0 {
-		rest := content[idx+12:]
+	if idx := strings.Index(stripped, "[TOOL_CALLS]"); idx >= 0 {
+		rest := stripped[idx+12:]
 		// Find tool name (everything before the first {)
 		braceIdx := strings.Index(rest, "{")
 		if braceIdx > 0 {
@@ -711,7 +779,7 @@ func detectTextToolCalls(content string) []textToolCall {
 
 	// Format 2: JSON objects with "name" and "parameters" on a line
 	if len(found) == 0 {
-		for _, line := range strings.Split(content, "\n") {
+		for _, line := range strings.Split(stripped, "\n") {
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "{") && strings.Contains(line, `"name"`) && (strings.Contains(line, `"parameters"`) || strings.Contains(line, `"parameter"`)) {
 				var tc struct {

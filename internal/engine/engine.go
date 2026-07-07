@@ -181,6 +181,24 @@ var toolDefs = []map[string]any{
 			},
 		},
 	},
+	{
+		"type": "function",
+		"function": map[string]any{
+			"name":        "install_mcp",
+			"description": "Install, remove, or manage MCP (Model Context Protocol) servers. MCP servers provide additional tools. Actions: install (add+connect a server), remove (stop+delete), list (show all), reconnect (restart a server).",
+			"parameters": map[string]any{
+				"type":     "object",
+				"required": []string{"action"},
+				"properties": map[string]any{
+					"action":  map[string]string{"type": "string", "description": "install, remove, list, or reconnect"},
+					"name":    map[string]string{"type": "string", "description": "Server name/ID (for install/remove/reconnect)"},
+					"command": map[string]string{"type": "string", "description": "Command to start the server (for install). e.g. npx, uvx, docker"},
+					"args":    map[string]any{"type": "array", "description": "Command arguments (for install)", "items": map[string]string{"type": "string"}},
+					"env":     map[string]any{"type": "object", "description": "Environment variables (for install)", "additionalProperties": map[string]string{"type": "string"}},
+				},
+			},
+		},
+	},
 }
 
 func (e *Engine) SelectedModel() string {
@@ -406,6 +424,7 @@ type streamChunk struct {
 		Delta struct {
 			Content          string `json:"content"`
 			ReasoningContent string `json:"reasoning_content"`
+			Reasoning        string `json:"reasoning"`
 			ToolCalls []struct {
 				Index    int    `json:"index"`
 				ID       string `json:"id"`

@@ -16,6 +16,7 @@ import (
 	"github.com/xnet-admin-1/ax/internal/agent"
 	"github.com/xnet-admin-1/ax/internal/engine"
 	"github.com/xnet-admin-1/ax/internal/gateway"
+	"github.com/xnet-admin-1/ax/internal/mcp"
 )
 
 type Server struct {
@@ -28,6 +29,7 @@ type Server struct {
 	Port     int
 	Bind     string
 	Token    string // active session token
+	McpMgr   *mcp.Manager
 
 	// Handoff state
 	handoffAgent string
@@ -45,6 +47,8 @@ type Server struct {
 func NewServer(db *sql.DB, gw *gateway.Router, webFS fs.FS, bind string, port int, password string) *Server {
 	hub := NewHub()
 	agentMgr := agent.NewManager(db, gw)
+	mcpMgr := mcp.NewManager(db)
+	mcpMgr.ConnectEnabled()
 	return &Server{
 		DB:       db,
 		Gateway:  gw,
@@ -54,6 +58,7 @@ func NewServer(db *sql.DB, gw *gateway.Router, webFS fs.FS, bind string, port in
 		Password: password,
 		Port:     port,
 		Bind:     bind,
+		McpMgr:   mcpMgr,
 		sessions: make(map[string]context.CancelFunc),
 	}
 }
@@ -282,6 +287,7 @@ func (s *Server) handleChatSend(client *Client, msg ChatSendMsg) {
 	// Create backend and start chat
 	backend := engine.NewLocal(s.DB, s.Gateway)
 	backend.AgentMgr = agent.NewManager(s.DB, s.Gateway)
+	backend.McpMgr = s.McpMgr
 	if msg.Mode != "" {
 		backend.Mode = msg.Mode
 	}

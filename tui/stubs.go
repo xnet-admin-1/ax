@@ -720,6 +720,7 @@ func Run(eng *engine.Engine) error {
 	backend := engine.NewLocal(eng.DB, eng.Gateway)
 	backend.AgentMgr = agent.NewManager(eng.DB, eng.Gateway)
 	backend.McpMgr = mcp.NewManager(eng.DB)
+	backend.McpMgr.ConnectEnabled()
 	m := NewLocalWithOpts(backend, LaunchOpts{})
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()

@@ -17,6 +17,7 @@ import (
 	"github.com/xnet-admin-1/ax/internal/debug"
 	"github.com/xnet-admin-1/ax/internal/engine"
 	"github.com/xnet-admin-1/ax/internal/gateway"
+	"github.com/xnet-admin-1/ax/internal/mcp"
 	"github.com/xnet-admin-1/ax/tui"
 )
 
@@ -120,6 +121,8 @@ func runTUI(f cliFlags) {
 	if f.trustAll {
 		backend.TrustAll = true
 	}
+	backend.McpMgr = mcp.NewManager(eng.DB)
+	backend.McpMgr.ConnectEnabled()
 
 	opts := tui.LaunchOpts{Agent: f.agent}
 	if f.resume {

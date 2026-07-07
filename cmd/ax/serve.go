@@ -9,6 +9,8 @@ import (
 )
 
 func runServe() {
+	// Always enable debug in serve mode for now
+	initDebug(cliFlags{debug: true})
 	database, gw := openDB()
 
 	webFS, err := fs.Sub(web.StaticFS, "static")

@@ -57,6 +57,7 @@ type ToolContext struct {
 	FileReadLimit     int
 	FetchLimit        int
 	McpExecutor       func(string, map[string]any) (string, error)
+	McpInstaller      func(map[string]any) (string, error)
 	OnProgress        func(string, string)
 	TrustAll          bool
 	AllowedTools      map[string]bool
@@ -110,6 +111,13 @@ var BuiltinTools = []ToolDef{
 		"type": "object", "properties": map[string]any{
 			"action": map[string]any{"type": "string", "description": "create, complete, or update"},
 			"tasks":  map[string]any{"type": "array", "description": "Task strings (for create)"},
+		}, "required": []string{"action"}}},
+	{Name: "install_mcp", Description: "Install/manage MCP servers for additional tools", Parameters: map[string]any{
+		"type": "object", "properties": map[string]any{
+			"action":  map[string]any{"type": "string", "description": "install, remove, list, or reconnect"},
+			"name":    map[string]any{"type": "string", "description": "Server name"},
+			"command": map[string]any{"type": "string", "description": "Command to run the server"},
+			"args":    map[string]any{"type": "array", "description": "Arguments"},
 		}, "required": []string{"action"}}},
 }
 
@@ -223,6 +231,16 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 		if err != nil {
 			return "", err
 		}
+		// Detect binary files — check for null bytes in first 512 bytes
+		check := data
+		if len(check) > 512 {
+			check = check[:512]
+		}
+		for _, b := range check {
+			if b == 0 {
+				return "error: binary file detected, cannot read as text", nil
+			}
+		}
 		return truncate(string(data), ctx.FileReadLimit), nil
 	case "write_file":
 		p := str(args, "path")
@@ -304,6 +322,11 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 		return "orchestrate not available in this context", nil
 	case "task_plan":
 		return executeTaskPlan(args), nil
+	case "install_mcp":
+		if ctx.McpInstaller == nil {
+			return "error: MCP manager not available", nil
+		}
+		return ctx.McpInstaller(args)
 	case "spawn_agent":
 		agentName := str(args, "agent")
 		if agentName == "" {

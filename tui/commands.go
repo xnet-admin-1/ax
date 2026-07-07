@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -213,7 +214,7 @@ func (m *model) panelView(width int) string {
 	case panelHelp:
 		return helpText
 	case panelModels:
-		return "Models  enter=select  esc=close\n\n" + m.modelList.View()
+		return "Models  /=filter  enter=select  esc=close\n\n" + m.renderFixedList(m.modelList)
 	case panelSessions:
 		return "Sessions  enter=open  n=rename  d=delete  esc=close\n\n" + m.sessList.View()
 	case panelTools:
@@ -393,4 +394,70 @@ func (m *model) handleCompactEnter() tea.Cmd {
 		return nil
 	}
 	return nil
+}
+
+// renderFixedList renders a list with the cursor at a fixed screen position
+// and items scrolling past it (like a picker wheel).
+func (m *model) renderFixedList(l list.Model) string {
+	items := l.Items()
+	if len(items) == 0 {
+		return "(empty)"
+	}
+
+	maxW := m.width - 8
+	if maxW < 30 {
+		maxW = 30
+	}
+	visibleH := l.Height() - 4
+	if visibleH < 5 {
+		visibleH = 5
+	}
+
+	cursor := l.Index()
+	total := len(items)
+
+	// Calculate how many lines each item takes
+	lineCount := func(title string) int {
+		n := (len(title) + 3) / maxW // +3 for "  > " prefix
+		if n < 1 {
+			n = 1
+		}
+		return n
+	}
+
+	// Build visible window: fill visibleH lines, cursor in middle
+	// First, figure out how many items fit above cursor to fill half
+	halfH := visibleH / 2
+
+	// Find start by counting lines backwards from cursor
+	start := cursor
+	lines := 0
+	for start > 0 && lines < halfH {
+		start--
+		lines += lineCount(items[start].FilterValue())
+	}
+	if lines > halfH {
+		start++
+	}
+
+	// Render from start until we fill visibleH
+	var sb strings.Builder
+	rendered := 0
+	for i := start; i < total && rendered < visibleH; i++ {
+		title := items[i].FilterValue()
+		prefix := "    "
+		if i == cursor {
+			prefix = "  > "
+		}
+		line := prefix + title
+		// Count lines this takes
+		lc := (len(line) + maxW - 1) / maxW
+		if lc < 1 {
+			lc = 1
+		}
+		sb.WriteString(line + "\n")
+		rendered += lc
+	}
+	sb.WriteString(fmt.Sprintf("\n  %d/%d", cursor+1, total))
+	return sb.String()
 }

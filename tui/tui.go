@@ -50,6 +50,8 @@ type model struct {
 	vp      viewport.Model
 	panelVp viewport.Model
 	panelCache string
+	viewCache  string
+	viewDirty  bool
 	input   inputModel
 	msgs      []chatMsg
 	convID    string
@@ -258,10 +260,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.viewDirty = true
 		m.recalcLayout()
 		return m, nil
 
 	case tea.KeyMsg:
+		m.viewDirty = true
 		s := msg.String()
 		// Filter SGR mouse sequences arriving as runes (e.g. [<65;89;32M)
 		if len(s) > 5 && s[0] == '[' && s[1] == '<' && (s[len(s)-1] == 'M' || s[len(s)-1] == 'm') {
@@ -280,12 +284,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
-		return m.handleMouse(msg)
+		// Only handle wheel and click — ignore motion events to avoid CPU spin
+		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown || msg.Button == tea.MouseButtonLeft {
+			return m.handleMouse(msg)
+		}
+		m.viewDirty = false
+		return m, nil
 
 	case eventMsg:
+		m.viewDirty = true
 		return m.handleEvent(engine.Event(msg))
 
 	case spinner.TickMsg:
+		m.viewDirty = true
 		m.spinTick++
 		if m.activity != "" {
 			var cmd tea.Cmd
@@ -304,6 +315,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case renderTickMsg:
 		if m.streaming || m.panel == panelAgents {
+			m.viewDirty = true
 			m.updateViewport()
 			return m, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 		}
@@ -316,14 +328,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case modelsMsg:
+		m.viewDirty = true
 		items := make([]list.Item, len(msg))
 		for i, m := range []string(msg) {
 			items[i] = modelItem(m)
 		}
-		m.modelList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-6)
+		d := list.NewDefaultDelegate()
+		d.SetSpacing(0)
+		d.SetHeight(1)
+		m.modelList = list.New(items, d, m.width-4, m.height-6)
 		m.modelList.SetShowHelp(false)
-		m.modelList.Title = "Models"
+		m.modelList.SetShowTitle(false)
 		m.modelList.SetFilteringEnabled(true)
+		m.modelList.SetShowStatusBar(false)
 		// Select current model
 		cur := m.backend.CurrentModel()
 		for i, mod := range []string(msg) {
@@ -497,6 +514,10 @@ func (m *model) View() string {
 	if m.width == 0 {
 		return "Loading..."
 	}
+	if !m.viewDirty && m.viewCache != "" {
+		return m.viewCache
+	}
+	m.viewDirty = false
 
 	status := m.statusBar()
 	inputView := m.input.View()
@@ -517,15 +538,9 @@ func (m *model) View() string {
 		m.panelVp.Width = m.width - 4
 		m.panelVp.Height = chatH - 2
 		if pContent != m.panelCache {
-			yOff := m.panelVp.YOffset
 			m.panelCache = pContent
 			m.panelVp.SetContent(pContent)
-			// Auto-scroll to bottom for agent log view
-			if m.panel == panelAgents && m.agentLogID != "" {
-				m.panelVp.GotoBottom()
-			} else {
-				m.panelVp.SetYOffset(yOff)
-			}
+			m.panelVp.GotoTop()
 		}
 		chatView = panelStyle.Width(m.width - 4).Height(chatH - 2).Render(bc + m.panelVp.View())
 	} else {
@@ -565,7 +580,9 @@ func (m *model) View() string {
 		base = lipgloss.JoinVertical(lipgloss.Left, status, chatView, activityLine, inputView, helpLine)
 	}
 	if m.inspector.showing {
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.inspector.view(m.width, m.height), lipgloss.WithWhitespaceChars(" "))
+		result := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.inspector.view(m.width, m.height), lipgloss.WithWhitespaceChars(" "))
+		m.viewCache = result
+		return result
 	}
 	// Floating confirm dialog for dangerous commands
 	if m.confirmCh != nil {
@@ -573,8 +590,11 @@ func (m *model) View() string {
 			lipgloss.NewStyle().Foreground(tokyoComment).Render(m.confirmReason) + "\n\n" +
 			helpKeyStyle.Render("y") + " approve  " + helpKeyStyle.Render("n") + " deny"
 		overlay := floatingDialog("Confirm Execution", content, 60)
-		return composeOverlay(base, overlay, m.width, m.height)
+		result := composeOverlay(base, overlay, m.width, m.height)
+		m.viewCache = result
+		return result
 	}
+	m.viewCache = base
 	return base
 }
 
@@ -639,8 +659,9 @@ func (m *model) recalcLayout() {
 	m.vp.Height = chatH
 
 	// Resize all panel lists (only if initialized)
+	// Must match panelVp.Height exactly so list's internal scroll works
 	listW := m.width - 4
-	listH := chatH - 4
+	listH := chatH - 2
 	if listH < 3 { listH = 3 }
 	if len(m.modelList.Items()) > 0 { m.modelList.SetSize(listW, listH) }
 	if len(m.sessList.Items()) > 0 { m.sessList.SetSize(listW, listH) }
@@ -654,19 +675,6 @@ func (m *model) recalcLayout() {
 	if len(m.spawnList.Items()) > 0 { m.spawnList.SetSize(listW, listH) }
 	if len(m.agentBuilderList.Items()) > 0 { m.agentBuilderList.SetSize(listW, listH) }
 	m.updateViewport()
-	// Resize panel lists (only if initialized)
-	pw, ph := m.width-4, m.height-8
-	if ph < 3 { ph = 3 }
-	if len(m.modelList.Items()) > 0 { m.modelList.SetSize(pw, ph) }
-	if len(m.sessList.Items()) > 0 { m.sessList.SetSize(pw, ph) }
-	if len(m.settingsList.Items()) > 0 { m.settingsList.SetSize(pw, ph) }
-	if len(m.configList.Items()) > 0 { m.configList.SetSize(pw, ph) }
-	if len(m.toolsList2.Items()) > 0 { m.toolsList2.SetSize(pw, ph) }
-	if len(m.providerList.Items()) > 0 { m.providerList.SetSize(pw, ph) }
-	if len(m.memoryList.Items()) > 0 { m.memoryList.SetSize(pw, ph) }
-	if len(m.spawnList.Items()) > 0 { m.spawnList.SetSize(pw, ph) }
-	if len(m.agentBuilderList.Items()) > 0 { m.agentBuilderList.SetSize(pw, ph) }
-	if len(m.agentsList.Items()) > 0 { m.agentsList.SetSize(pw, ph) }
 }
 
 func (m *model) statusBar() string {
@@ -686,20 +694,12 @@ func (m *model) statusBar() string {
 		ind = getSpinnerFrame("thinking", m.spinTick)
 	}
 
-	title := "AX"
-	if m.convTitle != "" {
-		title = m.convTitle
-	}
-	if len(title) > 25 {
-		title = title[:25]
-	}
-
 	modelName := m.backend.CurrentModel()
 	if idx := strings.LastIndex(modelName, "/"); idx >= 0 {
 		modelName = modelName[idx+1:]
 	}
-	if len(modelName) > 20 {
-		modelName = modelName[:20]
+	if len(modelName) > 30 {
+		modelName = modelName[:30]
 	}
 
 	elapsed := time.Since(m.sessionStart)
@@ -717,8 +717,8 @@ func (m *model) statusBar() string {
 		agentStr = fmt.Sprintf(" [%d agents]", agents)
 	}
 
-	left := fmt.Sprintf(" [%s] %s %s", modeInd, ind, title)
-	center := modelName
+	left := fmt.Sprintf(" [%s] %s %s", modeInd, ind, modelName)
+	center := ""
 	tokStr := fmt.Sprintf("%d", m.tokens)
 	if m.tokens >= 1000000 {
 		tokStr = fmt.Sprintf("%.1fM", float64(m.tokens)/1000000)
