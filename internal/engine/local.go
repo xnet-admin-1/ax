@@ -236,6 +236,9 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 		messages = append([]Message{{Role: "system", Content: sys}}, messages...)
 	}
 	for {
+		// Compact messages if approaching context limit (keeps tools working at high token counts)
+		messages = l.compactIfNeeded(ctx, apiBase, apiKey, model, messages)
+
 		content, toolCalls, tokens, err := l.stream(ctx, apiBase, apiKey, model, messages, ch)
 		if err != nil {
 			ch <- Event{Type: "error", Error: err.Error()}
@@ -364,6 +367,116 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", truncateToolResult(result), tc.Function.Name+"|"+tc.ID, time.Now().Unix())
 		}
 	}
+}
+
+// compactIfNeeded truncates tool results and summarizes old messages when the
+// conversation approaches 60% of the context limit. This prevents models from
+// silently dropping tool use when the context gets too large.
+func (l *Local) compactIfNeeded(ctx context.Context, apiBase, apiKey, model string, messages []Message) []Message {
+	est := estimateTokens(messages)
+	threshold := contextLimit * 60 / 100 // 60% = ~76k tokens
+
+	if est < threshold {
+		return messages
+	}
+
+	// Strategy 1: Aggressively truncate old tool results (keep last 6 tool results full)
+	toolResultCount := 0
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "tool" {
+			toolResultCount++
+		}
+	}
+	if toolResultCount > 6 {
+		truncated := 0
+		for i := 0; i < len(messages); i++ {
+			if messages[i].Role == "tool" && truncated < toolResultCount-6 {
+				// Truncate old tool results to 500 chars
+				if len(messages[i].Content) > 500 {
+					messages[i].Content = messages[i].Content[:500] + "\n...[compacted]"
+				}
+				truncated++
+			}
+		}
+	}
+
+	// Re-check after truncation
+	est = estimateTokens(messages)
+	if est < threshold {
+		return messages
+	}
+
+	// Strategy 2: Summarize old messages (keep system + last 10 messages)
+	keep := 10
+	if len(messages) <= keep+1 {
+		return messages
+	}
+
+	// Find system message
+	sysIdx := -1
+	for i, m := range messages {
+		if m.Role == "system" {
+			sysIdx = i
+			break
+		}
+	}
+
+	// Build summary of middle messages
+	start := 0
+	if sysIdx >= 0 {
+		start = sysIdx + 1
+	}
+	end := len(messages) - keep
+
+	if end <= start {
+		return messages
+	}
+
+	var toSummarize strings.Builder
+	toSummarize.WriteString("Conversation summary (prior tool calls and results omitted for brevity):\n")
+	for _, m := range messages[start:end] {
+		if m.Role == "tool" {
+			// Just note tool was called, don't include full result
+			name := m.Name
+			if name == "" {
+				name = "tool"
+			}
+			fmt.Fprintf(&toSummarize, "[%s]: (result: %d chars)\n", name, len(m.Content))
+		} else if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			// Note tool calls without full args
+			for _, tc := range m.ToolCalls {
+				fmt.Fprintf(&toSummarize, "[assistant called %s]\n", tc.Function.Name)
+			}
+			if m.Content != "" {
+				preview := m.Content
+				if len(preview) > 200 {
+					preview = preview[:200]
+				}
+				fmt.Fprintf(&toSummarize, "[assistant]: %s\n", preview)
+			}
+		} else {
+			preview := m.Content
+			if len(preview) > 300 {
+				preview = preview[:300]
+			}
+			fmt.Fprintf(&toSummarize, "[%s]: %s\n", m.Role, preview)
+		}
+	}
+
+	// Replace middle with a single summary message
+	summaryMsg := Message{
+		Role:    "user",
+		Content: "[Context compacted to stay within limits]\n" + toSummarize.String(),
+	}
+
+	var compacted []Message
+	if sysIdx >= 0 {
+		compacted = append(compacted, messages[sysIdx])
+	}
+	compacted = append(compacted, summaryMsg)
+	compacted = append(compacted, messages[end:]...)
+
+	return compacted
 }
 
 func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messages []Message, ch chan Event) (string, []ToolCall, int, error) {
