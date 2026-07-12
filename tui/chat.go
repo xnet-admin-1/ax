@@ -264,6 +264,9 @@ func filterToolMarkup(s string, width int) string {
 		return wrapThought(inner[1], width)
 	})
 	result := s
+	// Strip <function=name> <parameter=key>value format (models outputting tool calls as text)
+	result = regexp.MustCompile(`(?s)<function=[^>]+>.*?(?:</function>|$)`).ReplaceAllString(result, "")
+	result = regexp.MustCompile(`<parameter=[^>]+>[^<]*`).ReplaceAllString(result, "")
 	for _, marker := range []string{"<|tool_call", "<|im_end", "<|assistant", "<|function_call"} {
 		for {
 			idx := strings.Index(result, marker)

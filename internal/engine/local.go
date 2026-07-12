@@ -929,5 +929,28 @@ func detectTextToolCalls(content string) []textToolCall {
 		}
 	}
 
+	// Format 3: <function=name> <parameter=key>value (XML-like, used by some models)
+	if len(found) == 0 {
+		funcRe := regexp.MustCompile(`<function=([^>]+)>`)
+		paramRe := regexp.MustCompile(`<parameter=([^>]+)>([^<]*)`)
+		funcMatches := funcRe.FindAllStringSubmatchIndex(stripped, -1)
+		for _, match := range funcMatches {
+			name := stripped[match[2]:match[3]]
+			// Find parameters after this function tag
+			rest := stripped[match[1]:]
+			args := map[string]any{}
+			paramMatches := paramRe.FindAllStringSubmatch(rest, -1)
+			for _, pm := range paramMatches {
+				if len(pm) >= 3 {
+					args[pm[1]] = strings.TrimSpace(pm[2])
+				}
+			}
+			if len(args) > 0 {
+				raw, _ := json.Marshal(args)
+				found = append(found, textToolCall{name: name, args: args, argsRaw: string(raw)})
+			}
+		}
+	}
+
 	return found
 }
