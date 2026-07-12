@@ -29,7 +29,7 @@ import (
 	"github.com/xnet-admin-1/ax/internal/agent"
 )
 
-const contextLimit = 128000
+const contextLimit = 200000
 
 var thoughtRe = regexp.MustCompile(`(?s)<thought>.*?</thought>`)
 

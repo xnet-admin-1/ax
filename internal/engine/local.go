@@ -374,7 +374,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 // silently dropping tool use when the context gets too large.
 func (l *Local) compactIfNeeded(ctx context.Context, apiBase, apiKey, model string, messages []Message) []Message {
 	est := estimateTokens(messages)
-	threshold := contextLimit * 60 / 100 // 60% = ~76k tokens
+	threshold := contextLimit * 75 / 100 // 75% = ~150k tokens
 
 	if est < threshold {
 		return messages
