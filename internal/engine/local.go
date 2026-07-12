@@ -538,7 +538,7 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 			})
 		}
 	}
-	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true}
+	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true, "tool_choice": "auto"}
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
 	if err != nil {
@@ -837,6 +837,9 @@ For multi-step work, use the task_plan tool to show progress:
 - Show results, not process
 - For code: show the relevant output, not every step
 - For errors: explain what went wrong and fix it
+
+## REMINDER: Always Use Tools
+Even deep into a conversation, you MUST continue using tools. Do NOT start describing actions instead of performing them. If you find yourself writing "I would run..." or "You could try..." — STOP and call the tool instead. Your tool access never expires. Use it on every turn that requires action.
 `, time.Now().Format("2006-01-02 15:04:05 MST"),
 		runtime.GOOS, runtime.GOARCH,
 		hostname, username, cwd)
