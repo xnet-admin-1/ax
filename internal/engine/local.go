@@ -432,6 +432,21 @@ func (l *Local) compactIfNeeded(ctx context.Context, apiBase, apiKey, model stri
 		return messages
 	}
 
+	// Ensure we don't split a tool call pair — walk 'end' backward until we hit
+	// a clean boundary (not a tool message, and not an assistant with tool_calls)
+	for end > start {
+		if messages[end].Role == "tool" {
+			end--
+		} else if messages[end].Role == "assistant" && len(messages[end].ToolCalls) > 0 {
+			end--
+		} else {
+			break
+		}
+	}
+	if end <= start {
+		return messages
+	}
+
 	var toSummarize strings.Builder
 	toSummarize.WriteString("Conversation summary (prior tool calls and results omitted for brevity):\n")
 	for _, m := range messages[start:end] {
