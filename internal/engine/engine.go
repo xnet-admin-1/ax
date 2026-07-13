@@ -434,6 +434,7 @@ type streamChunk struct {
 				} `json:"function"`
 			} `json:"tool_calls"`
 		} `json:"delta"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		TotalTokens int `json:"total_tokens"`

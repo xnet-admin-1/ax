@@ -239,12 +239,18 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 		// Compact messages if approaching context limit (keeps tools working at high token counts)
 		messages = l.compactIfNeeded(ctx, apiBase, apiKey, model, messages)
 
-		content, toolCalls, tokens, err := l.stream(ctx, apiBase, apiKey, model, messages, ch)
+		content, toolCalls, tokens, finishReason, err := l.stream(ctx, apiBase, apiKey, model, messages, ch)
 		if err != nil {
 			ch <- Event{Type: "error", Error: err.Error()}
 			return
 		}
 		if len(toolCalls) == 0 {
+			// If response was cut off due to max_tokens, continue the conversation
+			if finishReason == "length" && content != "" {
+				messages = append(messages, Message{Role: "assistant", Content: content})
+				messages = append(messages, Message{Role: "user", Content: "Continue from where you left off. Keep using tools as needed."})
+				continue
+			}
 			// Detect text-mode tool calls (model outputs JSON instead of using function calling)
 			if parsed := detectTextToolCalls(content); len(parsed) > 0 {
 				for _, tc := range parsed {
@@ -494,7 +500,7 @@ func (l *Local) compactIfNeeded(ctx context.Context, apiBase, apiKey, model stri
 	return compacted
 }
 
-func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messages []Message, ch chan Event) (string, []ToolCall, int, error) {
+func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messages []Message, ch chan Event) (string, []ToolCall, int, string, error) {
 	if messages == nil {
 		messages = []Message{}
 	}
@@ -538,30 +544,31 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 			})
 		}
 	}
-	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true, "tool_choice": "auto"}
+	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true, "tool_choice": "auto", "max_tokens": 16384}
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
 	if err != nil {
-		return "", nil, 0, err
+		return "", nil, 0, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
-		return "", nil, 0, err
+		return "", nil, 0, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return "", nil, 0, fmt.Errorf("API error %d: %s", resp.StatusCode, b)
+		return "", nil, 0, "", fmt.Errorf("API error %d: %s", resp.StatusCode, b)
 	}
 	var content strings.Builder
 	var toolCalls []ToolCall
 	var inThought bool
 	tcArgs := map[int]*strings.Builder{}
 	var tokens int
+	var finishReason string
 	var remainder string
 	buf := make([]byte, 8192)
 	for {
@@ -588,6 +595,9 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 				}
 				if len(chunk.Choices) == 0 {
 					continue
+				}
+				if chunk.Choices[0].FinishReason != "" {
+					finishReason = chunk.Choices[0].FinishReason
 				}
 				delta := chunk.Choices[0].Delta
 				if delta.ReasoningContent != "" {
@@ -673,7 +683,7 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 			break
 		}
 		if readErr != nil {
-			return "", nil, 0, readErr
+			return "", nil, 0, "", readErr
 		}
 	}
 done:
@@ -682,7 +692,7 @@ done:
 			toolCalls[i].Function.Arguments = b.String()
 		}
 	}
-	return content.String(), toolCalls, tokens, nil
+	return content.String(), toolCalls, tokens, finishReason, nil
 }
 
 const maxToolResultSize = 131072 // 128KB
