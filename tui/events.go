@@ -7,7 +7,9 @@
 package tui
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +29,17 @@ func (m *model) sendInput() (tea.Model, tea.Cmd) {
 	if strings.HasPrefix(val, "/") {
 		cmd := m.handleCommand(val)
 		return m, cmd
+	}
+
+	// Shell escape: !command runs directly without triggering an LLM turn
+	if strings.HasPrefix(val, "!") {
+		command := strings.TrimPrefix(val, "!")
+		if command == "" {
+			return m, nil
+		}
+		m.msgs = append(m.msgs, chatMsg{role: "user", content: "!" + command})
+		m.updateViewport()
+		return m, m.runShellEscape(command)
 	}
 
 	// Interrupt current response if streaming
@@ -258,3 +271,21 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 	return m, m.readNextEvent()
 }
 
+
+// runShellEscape executes a shell command directly and shows the output
+// without triggering an LLM turn.
+func (m *model) runShellEscape(command string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "bash", "-c", command)
+		out, err := cmd.CombinedOutput()
+		result := strings.TrimRight(string(out), "\n")
+		if err != nil && result == "" {
+			result = err.Error()
+		}
+		return shellEscapeMsg(result)
+	}
+}
+
+type shellEscapeMsg string

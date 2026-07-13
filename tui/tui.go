@@ -392,6 +392,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addSystemMsg("" + error(msg).Error())
 		return m, nil
 
+	case shellEscapeMsg:
+		result := string(msg)
+		if result == "" {
+			result = "(no output)"
+		}
+		m.msgs = append(m.msgs, chatMsg{role: "tool_result", content: result})
+		m.updateViewport()
+		return m, nil
 
 	case settingsLoadedMsg:
 		items := []list.Item(msg)
