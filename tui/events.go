@@ -156,6 +156,7 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		m.tokens += len(strings.Fields(ev.Delta))
 		if m.activity == "" {
 			m.activity = "thinking"
+			return m, tea.Batch(m.readNextEvent(), m.spinner.Tick)
 		}
 		return m, m.readNextEvent()
 	case "reasoning":

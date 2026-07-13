@@ -19,6 +19,7 @@ func SeedExampleProviders(db *sql.DB) {
 		{"zen", "https://opencode.ai/zen/v1"},
 		{"cohere", "https://api.cohere.ai/compatibility/v1"},
 		{"pollinations-pollen", "https://gen.pollinations.ai/v1"},
+		{"aiope-gateway", "https://inf.xnet.ngo/v1"},
 	}
 	for _, e := range examples {
 		db.Exec("INSERT OR IGNORE INTO providers(name, api_key, api_base, enabled, models) VALUES(?,?,?,?,?)",

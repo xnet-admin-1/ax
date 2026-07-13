@@ -78,6 +78,7 @@ func SeedFromDefaults(db *sql.DB) error {
 		{"cohere", "https://api.cohere.ai/compatibility/v1", 1},
 		{"pollinations-pollen", "https://gen.pollinations.ai/v1", 1},
 		{"bedrock-mantle", "https://bedrock-mantle.us-west-2.api.aws/v1", 0},
+		{"aiope-gateway", "https://inf.xnet.ngo/v1", 1},
 	}
 
 	for _, d := range defaults {

@@ -11,18 +11,55 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
+// DataDir can be set externally (e.g. via --data-dir flag) to override default resolution.
+var DataDir string
+
 func DefaultPath() string {
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".ax")
+	dir := resolveDataDir()
 	os.MkdirAll(dir, 0755)
 	return filepath.Join(dir, "ax.db")
 }
 
+// resolveDataDir determines the data directory in priority order:
+// 1. Explicit DataDir (set via --data-dir flag)
+// 2. Portable: .ax/ directory next to the binary
+// 3. Portable: ax.db file next to the binary
+// 4. Default: ~/.ax/
+func resolveDataDir() string {
+	// 1. Explicit override
+	if DataDir != "" {
+		return DataDir
+	}
+
+	// 2-3. Check next to binary (portable mode)
+	exe, err := os.Executable()
+	if err == nil {
+		exe, _ = filepath.EvalSymlinks(exe)
+		exeDir := filepath.Dir(exe)
+
+		// Check for .ax/ directory next to binary
+		portableDir := filepath.Join(exeDir, ".ax")
+		if info, err := os.Stat(portableDir); err == nil && info.IsDir() {
+			return portableDir
+		}
+
+		// Check for ax.db next to binary
+		portableDB := filepath.Join(exeDir, "ax.db")
+		if _, err := os.Stat(portableDB); err == nil {
+			return exeDir
+		}
+	}
+
+	// 4. Default: ~/.ax/
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".ax")
+}
+
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
@@ -30,10 +67,12 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	// Seed providers - try file override first, then example defaults
-	configPath := filepath.Join(os.Getenv("HOME"), ".ax", "gateway-config.json")
+	// Seed providers: file override → embedded → example defaults
+	configPath := filepath.Join(resolveDataDir(), "gateway-config.json")
 	if err := SeedProviders(db, configPath); err != nil {
-		SeedExampleProviders(db)
+		if err := SeedFromEmbedded(db); err != nil {
+			SeedExampleProviders(db)
+		}
 	}
 	return db, nil
 }

@@ -216,7 +216,7 @@ func (m *model) panelView(width int) string {
 	case panelModels:
 		return "Models  /=filter  enter=select  esc=close\n\n" + m.renderFixedList(m.modelList)
 	case panelSessions:
-		return "Sessions  enter=open  n=rename  d=delete  esc=close\n\n" + m.sessList.View()
+		return "Sessions  enter=open  n=rename  d=delete  esc=close\n\n" + m.renderFixedList(m.sessList)
 	case panelTools:
 		return m.toolsPanelView()
 	case panelUsage:
@@ -408,7 +408,7 @@ func (m *model) renderFixedList(l list.Model) string {
 	if maxW < 30 {
 		maxW = 30
 	}
-	visibleH := l.Height() - 4
+	visibleH := m.height - 10
 	if visibleH < 5 {
 		visibleH = 5
 	}

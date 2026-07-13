@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/xnet-admin-1/ax/internal/db"
 )
 
 func init() {
@@ -67,6 +69,9 @@ type cliFlags struct {
 
 	// Feature 11: Dry Run
 	dryRun bool // --dry-run: validate and show what would be sent without calling the API
+
+	// Data directory override (portable mode)
+	dataDir string // --data-dir: use custom data directory
 }
 
 func parseFlags() cliFlags {
@@ -161,6 +166,11 @@ func parseFlags() cliFlags {
 				i++
 				f.file = args[i]
 			}
+		case "--data-dir":
+			if i+1 < len(args) {
+				i++
+				f.dataDir = args[i]
+			}
 		}
 	}
 	return f
@@ -168,6 +178,9 @@ func parseFlags() cliFlags {
 
 func main() {
 	f := parseFlags()
+	if f.dataDir != "" {
+		db.DataDir = f.dataDir
+	}
 	switch {
 	case f.serve:
 		runServe()
@@ -221,5 +234,9 @@ Integration:
   --models              List available models
 
 Debug:
-  -d, --debug           Enable debug logging`)
+  -d, --debug           Enable debug logging
+
+Portable:
+  --data-dir path       Use custom data directory (overrides auto-detection)
+                        Auto-detects: .ax/ or ax.db next to binary → ~/.ax/`)
 }

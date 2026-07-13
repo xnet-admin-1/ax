@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 
-	"golang.org/x/sys/unix"
 	"os/exec"
 	"time"
 	"strings"
@@ -191,10 +190,7 @@ func NewLocalWithOpts(b engine.Backend, opts LaunchOpts) tea.Model {
 	p.Width = 30
 	gr, _ := glamour.NewTermRenderer(glamour.WithStandardStyle(styles.DarkStyle), glamour.WithWordWrap(76))
 	// Get initial terminal size to avoid "Loading..." screen
-	w, h := 80, 24
-	if ws, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ); err == nil {
-		w, h = int(ws.Col), int(ws.Row)
-	}
+	w, h := getTerminalSize()
 	m := &model{
 		backend:       b,
 		mode:          "chat",
@@ -258,11 +254,11 @@ func (m *model) Init() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.viewDirty = true
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewDirty = true
 		m.recalcLayout()
 		return m, nil
 
@@ -298,14 +294,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEvent(engine.Event(msg))
 
 	case spinner.TickMsg:
-		m.viewDirty = true
 		m.spinTick++
 		if m.activity != "" {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
-		return m, m.spinner.Tick
+		// Idle — don't re-tick or re-render
+		m.viewDirty = false
+		return m, nil
 
 	case stopwatch.TickMsg, stopwatch.StartStopMsg:
 		var cmd tea.Cmd
@@ -317,11 +314,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case renderTickMsg:
 		if m.streaming || m.panel == panelAgents {
-			m.viewDirty = true
 			m.updateViewport()
 			return m, tea.Tick(8*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 		}
-		// Slow tick when idle (1s) for agent poll updates
+		// Slow tick when idle — don't trigger re-render
+		m.viewDirty = false
 		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 
 	case progress.FrameMsg:
@@ -367,7 +364,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			items[i] = sessionItem{id: c.ID, title: title, ts: c.UpdatedAt}
 		}
-		m.sessList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-6)
+		sd := list.NewDefaultDelegate()
+		sd.SetSpacing(0)
+		sd.SetHeight(1)
+		m.sessList = list.New(items, sd, m.width-4, m.height-6)
 		m.sessList.SetShowHelp(false)
 		m.sessList.Title = "Sessions"
 		m.sessList.SetFilteringEnabled(true)
@@ -576,21 +576,12 @@ func (m *model) View() string {
 		chatView = m.palette.view(m.width, chatH)
 	}
 
-	layout := getLayoutMode(m.width)
-	helpLine := ""
-	if layout != layoutCompact {
-		helpLine = m.helpBar()
-	}
+	helpLine := m.helpBar()
 	if activityLine == "" {
 		activityLine = " "
 	}
 	var base string
-	if layout == layoutCompact {
-		// Compact: no help bar, minimal chrome
-		base = lipgloss.JoinVertical(lipgloss.Left, status, chatView, activityLine, inputView)
-	} else {
-		base = lipgloss.JoinVertical(lipgloss.Left, status, chatView, activityLine, inputView, helpLine)
-	}
+	base = lipgloss.JoinVertical(lipgloss.Left, status, chatView, activityLine, inputView, helpLine)
 	if m.inspector.showing {
 		result := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.inspector.view(m.width, m.height), lipgloss.WithWhitespaceChars(" "))
 		m.viewCache = result
@@ -714,7 +705,6 @@ func (m *model) statusBar() string {
 		modelName = modelName[:30]
 	}
 
-	elapsed := time.Since(m.sessionStart)
 	modeInd := map[string]string{"chat": "C", "plan": "P", "build": "B"}[m.mode]
 	if modeInd == "" { modeInd = "C" }
 
@@ -737,7 +727,7 @@ func (m *model) statusBar() string {
 	} else if m.tokens >= 1000 {
 		tokStr = fmt.Sprintf("%.1fk", float64(m.tokens)/1000)
 	}
-	right := fmt.Sprintf("%stok %s%s ", tokStr, formatDuration(elapsed), agentStr)
+	right := fmt.Sprintf("%stok%s ", tokStr, agentStr)
 
 	leftW := len(left)
 	rightW := len(right)
