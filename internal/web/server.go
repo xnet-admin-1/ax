@@ -105,6 +105,19 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /api/agents/return", s.requireAuth(s.handleReturn))
 	mux.HandleFunc("GET /api/agents/handoff", s.requireAuth(s.getHandoff))
 
+	// API v1 endpoints
+	mux.HandleFunc("POST /api/v1/tools/execute", s.requireAuth(s.Handlers.ExecuteTool))
+	mux.HandleFunc("POST /api/v1/tools/run_sh", s.requireAuth(s.Handlers.RunSh))
+	mux.HandleFunc("POST /api/v1/tools/read_file", s.requireAuth(s.Handlers.ReadFile))
+	mux.HandleFunc("POST /api/v1/tools/write_file", s.requireAuth(s.Handlers.WriteFile))
+	mux.HandleFunc("POST /api/v1/tools/edit_file", s.requireAuth(s.Handlers.EditFile))
+	mux.HandleFunc("POST /api/v1/tools/list_dir", s.requireAuth(s.Handlers.ListDir))
+	mux.HandleFunc("POST /api/v1/tools/search_web", s.requireAuth(s.Handlers.SearchWeb))
+	mux.HandleFunc("POST /api/v1/batch", s.requireAuth(s.Handlers.BatchProcess))
+	mux.HandleFunc("POST /api/v1/simulate", s.requireAuth(s.Handlers.Simulate))
+	mux.HandleFunc("POST /api/v1/files/upload", s.requireAuth(s.handleFileUpload))
+	mux.HandleFunc("POST /api/v1/mcp/{server}", s.requireAuth(s.handleMCP))
+
 	// WebSocket
 	mux.HandleFunc("/ws", s.handleWS)
 
