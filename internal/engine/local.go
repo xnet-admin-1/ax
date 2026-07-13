@@ -258,11 +258,12 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 				if preContent != "" {
 					ch <- Event{Type: "delta", Delta: preContent}
 				}
-				// Flush pre-content as assistant message if present
-				if preContent != "" {
-					messages = append(messages, Message{Role: "assistant", Content: preContent})
-					l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", preContent, time.Now().Unix())
-				}
+
+				// Build the assistant message with the full original content
+				messages = append(messages, Message{Role: "assistant", Content: content})
+
+				// Execute each tool call and collect results
+				var toolResultSummary strings.Builder
 				for _, tc := range parsed {
 					ch <- Event{Type: "tool_call", Tool: tc.name, ToolName: tc.name, ToolArgs: tc.argsRaw}
 					textToolCtx := &llm.ToolContext{
@@ -278,16 +279,36 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 						textToolCtx.McpExecutor = l.McpMgr.ExecuteTool
 						textToolCtx.McpInstaller = l.McpMgr.InstallTool
 					}
-					result, err := llm.ExecuteTool(tc.name, tc.args, textToolCtx)
-					if err != nil {
-						result = "error: " + err.Error()
+					if l.DB != nil {
+						textToolCtx.SaveMemory = func(key, value string) error {
+							_, err := l.DB.Exec("INSERT OR REPLACE INTO memories(key, content) VALUES(?,?)", key, value)
+							return err
+						}
+						textToolCtx.RecallMemory = func(query string) string {
+							rows, err := l.DB.Query("SELECT key, content FROM memories WHERE key LIKE ? OR content LIKE ? LIMIT 10", "%"+query+"%", "%"+query+"%")
+							if err != nil { return "no results" }
+							defer rows.Close()
+							var results []string
+							for rows.Next() {
+								var k, v string
+								rows.Scan(&k, &v)
+								results = append(results, k+": "+v)
+							}
+							if len(results) == 0 { return "no memories found" }
+							return strings.Join(results, "\n")
+						}
+					}
+					result, execErr := llm.ExecuteTool(tc.name, tc.args, textToolCtx)
+					if execErr != nil {
+						result = "error: " + execErr.Error()
 					}
 					ch <- Event{Type: "tool_result", Tool: tc.name, ToolName: tc.name, ToolResult: result}
-					// Only include tool call marker in messages, not the full content with prose
-					messages = append(messages, Message{Role: "assistant", Content: "", ToolCalls: []ToolCall{{ID: tc.name, Type: "function", Function: FunctionCall{Name: tc.name, Arguments: tc.argsRaw}}}})
-					messages = append(messages, Message{Role: "tool", Content: truncateToolResult(result), Name: tc.name, ToolCallID: tc.name})
+					fmt.Fprintf(&toolResultSummary, "[%s result]:\n%s\n\n", tc.name, truncateToolResult(result))
 				}
-				content = ""
+
+				// Feed results back as a user message (text-mode models don't understand structured tool messages)
+				messages = append(messages, Message{Role: "user", Content: "[Tool execution results — continue with your response]\n\n" + toolResultSummary.String()})
+				l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", content, time.Now().Unix())
 				continue
 			}
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", content, time.Now().Unix())
