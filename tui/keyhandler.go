@@ -222,6 +222,20 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.vp.LineDown(1)
 		}
 		return m, nil
+	case "pgup":
+		if m.panel != panelNone {
+			m.panelVp.LineUp(3)
+		} else {
+			m.vp.LineUp(3)
+		}
+		return m, nil
+	case "pgdown":
+		if m.panel != panelNone {
+			m.panelVp.LineDown(3)
+		} else {
+			m.vp.LineDown(3)
+		}
+		return m, nil
 	case "shift+left":
 		m.input.HistoryUp()
 		return m, nil
