@@ -19,19 +19,44 @@ var settings struct {
 // before withMetadata runs its post-processing. Handlers set this header themselves.
 const headerTokensUsed = "X-Tokens-Used"
 
+// timedResponseWriter wraps http.ResponseWriter to inject timing headers
+// before the first bytes are written, which is critical for streaming responses.
+type timedResponseWriter struct {
+	http.ResponseWriter
+	start   time.Time
+	written bool
+}
+
+func (w *timedResponseWriter) WriteHeader(code int) {
+	if !w.written {
+		w.Header().Set("X-Request-Time-Ms", fmt.Sprintf("%d", time.Since(w.start).Milliseconds()))
+		w.written = true
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *timedResponseWriter) Write(b []byte) (int, error) {
+	if !w.written {
+		w.WriteHeader(200)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
 // withMetadata wraps an http.HandlerFunc to inject response metadata headers.
 func withMetadata(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		next(w, r)
-
-		elapsed := time.Since(start).Milliseconds()
-		w.Header().Set("X-Request-Time-Ms", fmt.Sprintf("%d", elapsed))
-
+		// Set headers that are known before the handler runs.
 		if settings.Model != "" {
 			w.Header().Set("X-Model", settings.Model)
 		}
+
+		// Wrap the ResponseWriter to inject timing on first write.
+		tw := &timedResponseWriter{
+			ResponseWriter: w,
+			start:          time.Now(),
+		}
+
+		next(tw, r)
 
 		// X-Tokens-Used is set by the handler if token counting is available.
 		// We leave it intact if already set; nothing to do here.
@@ -261,11 +286,12 @@ func sliceToMarkdown(v reflect.Value) string {
 // rateLimiter implements an in-memory token bucket per IP address.
 // Default: 100 requests per minute.
 type rateLimiter struct {
-	mu       sync.Mutex
-	buckets  map[string]*bucket
-	rate     int           // tokens added per interval
-	interval time.Duration // refill interval
-	burst    int           // max tokens (bucket capacity)
+	mu           sync.Mutex
+	buckets      map[string]*bucket
+	rate         int           // tokens added per interval
+	interval     time.Duration // refill interval
+	burst        int           // max tokens (bucket capacity)
+	requestCount int           // counter for periodic cleanup
 }
 
 type bucket struct {
@@ -290,6 +316,11 @@ var defaultRateLimiter = newRateLimiter(100)
 func (rl *rateLimiter) Allow(ip string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+
+	rl.requestCount++
+	if rl.requestCount%100 == 0 {
+		rl.cleanup()
+	}
 
 	now := time.Now()
 	b, exists := rl.buckets[ip]
@@ -318,4 +349,15 @@ func (rl *rateLimiter) Allow(ip string) bool {
 	}
 
 	return false
+}
+
+// cleanup removes buckets that haven't been accessed in over 2 minutes.
+// Must be called with rl.mu held.
+func (rl *rateLimiter) cleanup() {
+	cutoff := time.Now().Add(-2 * time.Minute)
+	for ip, b := range rl.buckets {
+		if b.lastTime.Before(cutoff) {
+			delete(rl.buckets, ip)
+		}
+	}
 }

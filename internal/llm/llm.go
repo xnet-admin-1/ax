@@ -73,6 +73,17 @@ type ToolContext struct {
 	MemoryDB          interface{ Exec(string, ...any) (interface{}, error); Query(string, ...any) (interface{ Next() bool; Scan(...any) error; Close() error }, error) }
 }
 
+// NewToolContext creates a standard ToolContext with common defaults.
+func NewToolContext(trustAll bool) *ToolContext {
+	return &ToolContext{
+		ShellOutputLimit:  8000,
+		FileReadLimit:     32000,
+		FetchLimit:        8000,
+		TrustAll:          trustAll,
+		SearchProviderURL: "https://search.xnet.ngo",
+	}
+}
+
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 var BuiltinTools = []ToolDef{

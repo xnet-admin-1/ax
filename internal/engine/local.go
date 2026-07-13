@@ -165,8 +165,17 @@ func (l *Local) GetMessages(convID string) ([]Message, error) {
 				m.ToolCallID = toolID.String
 			}
 		}
-		// Skip messages that cant be reconstructed without tool_calls context
-		if m.Role == "tool" { continue }
+		// Include tool results (truncated) for context continuity
+		if m.Role == "tool" {
+			if len(m.Content) > 500 {
+				m.Content = m.Content[:500] + "...[truncated]"
+			}
+			// Reconstruct as user message for models that don't support tool role
+			m.Role = "user"
+			m.Content = "[Tool result: " + m.Name + "]\n" + m.Content
+			out = append(out, m)
+			continue
+		}
 		if m.Role == "assistant" && m.Content == "" {
 			continue
 		}
@@ -390,13 +399,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 				toolCtx.McpExecutor = l.McpMgr.ExecuteTool
 				toolCtx.McpInstaller = l.McpMgr.InstallTool
 			}
-			var result string
-			var err error
-			if false {
-				result = l.ExecuteOrchestrate(tc.Function.Arguments, ch)
-			} else {
-				result, err = llm.ExecuteTool(tc.Function.Name, args, toolCtx)
-			}
+			result, err := llm.ExecuteTool(tc.Function.Name, args, toolCtx)
 			if err != nil {
 				result = "error: " + err.Error()
 			}

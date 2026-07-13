@@ -63,6 +63,13 @@ func NewServer(db *sql.DB, gw *gateway.Router, webFS fs.FS, bind string, port in
 	}
 }
 
+func limitBody(next http.HandlerFunc, maxBytes int64) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		next(w, r)
+	}
+}
+
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
@@ -106,17 +113,17 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /api/agents/handoff", s.requireAuth(s.getHandoff))
 
 	// API v1 endpoints
-	mux.HandleFunc("POST /api/v1/tools/execute", s.requireAuth(s.Handlers.ExecuteTool))
-	mux.HandleFunc("POST /api/v1/tools/run_sh", s.requireAuth(s.Handlers.RunSh))
-	mux.HandleFunc("POST /api/v1/tools/read_file", s.requireAuth(s.Handlers.ReadFile))
-	mux.HandleFunc("POST /api/v1/tools/write_file", s.requireAuth(s.Handlers.WriteFile))
-	mux.HandleFunc("POST /api/v1/tools/edit_file", s.requireAuth(s.Handlers.EditFile))
-	mux.HandleFunc("POST /api/v1/tools/list_dir", s.requireAuth(s.Handlers.ListDir))
-	mux.HandleFunc("POST /api/v1/tools/search_web", s.requireAuth(s.Handlers.SearchWeb))
-	mux.HandleFunc("POST /api/v1/batch", s.requireAuth(s.Handlers.BatchProcess))
-	mux.HandleFunc("POST /api/v1/simulate", s.requireAuth(s.Handlers.Simulate))
-	mux.HandleFunc("POST /api/v1/files/upload", s.requireAuth(s.handleFileUpload))
-	mux.HandleFunc("POST /api/v1/mcp/{server}", s.requireAuth(s.handleMCP))
+	mux.HandleFunc("POST /api/v1/tools/execute", s.requireAuth(limitBody(s.Handlers.ExecuteTool, 10<<20)))
+	mux.HandleFunc("POST /api/v1/tools/run_sh", s.requireAuth(limitBody(s.Handlers.RunSh, 10<<20)))
+	mux.HandleFunc("POST /api/v1/tools/read_file", s.requireAuth(limitBody(s.Handlers.ReadFile, 10<<20)))
+	mux.HandleFunc("POST /api/v1/tools/write_file", s.requireAuth(limitBody(s.Handlers.WriteFile, 10<<20)))
+	mux.HandleFunc("POST /api/v1/tools/edit_file", s.requireAuth(limitBody(s.Handlers.EditFile, 10<<20)))
+	mux.HandleFunc("POST /api/v1/tools/list_dir", s.requireAuth(limitBody(s.Handlers.ListDir, 10<<20)))
+	mux.HandleFunc("POST /api/v1/tools/search_web", s.requireAuth(limitBody(s.Handlers.SearchWeb, 10<<20)))
+	mux.HandleFunc("POST /api/v1/batch", s.requireAuth(limitBody(s.Handlers.BatchProcess, 10<<20)))
+	mux.HandleFunc("POST /api/v1/simulate", s.requireAuth(limitBody(s.Handlers.Simulate, 10<<20)))
+	mux.HandleFunc("POST /api/v1/files/upload", s.requireAuth(limitBody(s.handleFileUpload, 10<<20)))
+	mux.HandleFunc("POST /api/v1/mcp/{server}", s.requireAuth(limitBody(s.handleMCP, 10<<20)))
 
 	// WebSocket
 	mux.HandleFunc("/ws", s.handleWS)
@@ -124,9 +131,20 @@ func (s *Server) Start() error {
 	// Static files
 	mux.Handle("/", http.FileServer(http.FS(s.WebFS)))
 
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+
 	addr := fmt.Sprintf("%s:%d", s.Bind, s.Port)
 	log.Printf("ax serve: listening on http://%s", addr)
-	return http.ListenAndServe(addr, mux)
+	return http.ListenAndServe(addr, handler)
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

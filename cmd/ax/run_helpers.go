@@ -21,6 +21,8 @@ import (
 
 // --- Feature 2: Streaming Spinner ---
 
+var stderrMu sync.Mutex
+
 type cliSpinner struct {
 	mu      sync.Mutex
 	active  bool
@@ -45,12 +47,16 @@ func (s *cliSpinner) Start() {
 		for {
 			select {
 			case <-s.stop:
+				stderrMu.Lock()
 				fmt.Fprintf(os.Stderr, "\r\033[K")
+				stderrMu.Unlock()
 				return
 			case <-ticker.C:
 				s.mu.Lock()
 				if s.active {
+					stderrMu.Lock()
 					fmt.Fprintf(os.Stderr, "\r%s Processing...", frames[i%len(frames)])
+					stderrMu.Unlock()
 					i++
 				}
 				s.mu.Unlock()
@@ -63,7 +69,9 @@ func (s *cliSpinner) Pause() {
 	s.mu.Lock()
 	s.active = false
 	s.mu.Unlock()
+	stderrMu.Lock()
 	fmt.Fprintf(os.Stderr, "\r\033[K")
+	stderrMu.Unlock()
 }
 
 func (s *cliSpinner) Resume() {
@@ -89,11 +97,15 @@ func confirmToolExecution(name, args string, trustAll bool, trust bool) bool {
 	}
 	if trust {
 		// --trust shows the tool but auto-approves
+		stderrMu.Lock()
 		fmt.Fprintf(os.Stderr, "  → %s(%s)\n", name, truncArgs(args, 80))
+		stderrMu.Unlock()
 		return true
 	}
 	// Interactive confirmation
+	stderrMu.Lock()
 	fmt.Fprintf(os.Stderr, "\n🔧 Tool: %s\n   Args: %s\n   Execute? [y/N]: ", name, truncArgs(args, 120))
+	stderrMu.Unlock()
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
 	answer = strings.TrimSpace(strings.ToLower(answer))
@@ -209,7 +221,9 @@ func runChatLoop(ctx context.Context, eng *engine.Engine, backend *engine.Local,
 				if len(summary) > 200 {
 					summary = summary[:200] + "..."
 				}
+				stderrMu.Lock()
 				fmt.Fprintf(os.Stderr, "  ← %s\n", strings.ReplaceAll(summary, "\n", " "))
+				stderrMu.Unlock()
 			}
 
 			msgs = append(msgs, engine.Message{
@@ -391,15 +405,7 @@ func cliSystemPrompt() string {
 }
 
 func getToolDefs() []map[string]any {
-	// Return the standard tool definitions from engine
-	return []map[string]any{
-		{"type": "function", "function": map[string]any{"name": "run_sh", "description": "Execute a bash command", "parameters": map[string]any{"type": "object", "required": []string{"command"}, "properties": map[string]any{"command": map[string]string{"type": "string", "description": "Bash command to execute"}}}}},
-		{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read file content", "parameters": map[string]any{"type": "object", "required": []string{"path"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "File path to read"}}}}},
-		{"type": "function", "function": map[string]any{"name": "write_file", "description": "Write content to a file", "parameters": map[string]any{"type": "object", "required": []string{"path", "content"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "File path"}, "content": map[string]string{"type": "string", "description": "Content to write"}}}}},
-		{"type": "function", "function": map[string]any{"name": "edit_file", "description": "Edit a file using SEARCH/REPLACE", "parameters": map[string]any{"type": "object", "required": []string{"path", "search", "replace"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "File path"}, "search": map[string]string{"type": "string", "description": "Exact lines to find"}, "replace": map[string]string{"type": "string", "description": "Replacement"}}}}},
-		{"type": "function", "function": map[string]any{"name": "list_dir", "description": "List directory contents", "parameters": map[string]any{"type": "object", "required": []string{"path"}, "properties": map[string]any{"path": map[string]string{"type": "string", "description": "Directory path"}}}}},
-		{"type": "function", "function": map[string]any{"name": "search_web", "description": "Search the web", "parameters": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string", "description": "Search query"}}}}},
-	}
+	return engine.ToolDefs()
 }
 
 // --- Feature 11: Dry Run ---

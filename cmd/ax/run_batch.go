@@ -117,6 +117,12 @@ func runAgentOrchestration(f cliFlags, database *sql.DB, gw *gateway.Router, pro
 
 	results := make(chan agentResult, len(agentNames))
 
+	timeout := f.timeout
+	if timeout == 0 {
+		timeout = 5 * time.Minute
+	}
+	deadline := time.Now().Add(timeout)
+
 	for _, name := range agentNames {
 		go func(agentName string) {
 			taskID, err := mgr.Spawn(agentName, prompt)
@@ -125,7 +131,11 @@ func runAgentOrchestration(f cliFlags, database *sql.DB, gw *gateway.Router, pro
 				return
 			}
 			// Wait for completion
-			for i := 0; i < 300; i++ {
+			for {
+				if time.Now().After(deadline) {
+					results <- agentResult{name: agentName, err: fmt.Errorf("timeout")}
+					return
+				}
 				t := mgr.GetTask(taskID)
 				if t != nil && (t.Status == "done" || t.Status == "error") {
 					if t.Status == "error" {
@@ -137,7 +147,6 @@ func runAgentOrchestration(f cliFlags, database *sql.DB, gw *gateway.Router, pro
 				}
 				time.Sleep(time.Second)
 			}
-			results <- agentResult{name: agentName, err: fmt.Errorf("timeout")}
 		}(name)
 	}
 

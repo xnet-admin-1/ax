@@ -201,6 +201,11 @@ var toolDefs = []map[string]any{
 	},
 }
 
+// ToolDefs returns the builtin tool definitions for API requests.
+func ToolDefs() []map[string]any {
+	return toolDefs
+}
+
 func (e *Engine) SelectedModel() string {
 	if e.Model != "" {
 		return e.Model

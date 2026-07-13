@@ -1,0 +1,178 @@
+# AX Web/Serve Mode Specification
+
+**Last Verified:** 2026-07-13 07:12 UTC
+
+## 1. Core Requirements
+
+### Missing Features in Web Mode
+| # | Feature               | CLI Status | Web Status | Priority | Implementation |
+|---|-----------------------|------------|------------|----------|----------------|
+| 1 | Tool Execution        | ✅ Working  | ❌ Missing  | CRITICAL | `/api/v1/tools` |
+| 2 | Agent Orchestration   | ✅ Working  | ❌ Missing  | CRITICAL | `/api/v1/agents` |
+| 3 | MCP Integration       | ✅ Working  | ❌ Missing  | HIGH     | `/api/v1/mcp` |
+| 4 | Trust System         | ✅ Working  | ❌ Missing  | HIGH     | Scope-based auth |
+| 5 | File Upload           | ✅ Working  | ❌ Missing  | MEDIUM   | `/api/v1/upload` |
+
+## 2. API Specification
+
+### 2.1 Tool Execution API
+```http
+POST /api/v1/tools/execute
+Authorization: Bearer {API_KEY}
+Content-Type: application/json
+
+{
+  "tool": "run_sh",
+  "parameters": {"command": "ls -la /tmp"},
+  "trust": true
+}
+
+Response:
+{
+  "status": "success",
+  "result": "total 12\n-rw-r--r-- 1 user group 123 Jul 13 07:00 test.txt",
+  "tool_used": "run_sh",
+  "execution_time_ms": 42
+}
+```
+
+### 2.2 Agent Orchestration API
+```http
+POST /api/v1/agents/spawn
+{
+  "agents": ["coder", "security"],
+  "task": "Review login system for vulnerabilities",
+  "timeout": "5m",
+  "trust": true
+}
+
+Response:
+{
+  "coder_result": "Here's the improved code...",
+  "security_result": "Found 3 potential vulnerabilities...",
+  "combined_output": "Integrated results..."
+}
+```
+
+## 3. Security Model
+
+### 3.1 API Key Scopes
+```bash
+# Generate key with scopes
+ax --generate-key --scopes "tools,agents,mcp,chat" --name "ci-server"
+
+# Valid scopes:
+- chat: Basic chat functionality
+- tools.run_sh: Shell command execution
+- tools.read_file: File reading
+- agents: Agent spawning/scheduling
+- mcp: MCP server access
+- admin: Full access
+```
+
+### 3.2 Trust Validation
+```go
+func validateToolExecution(tool string, apiKey string) error {
+    scopes := getKeyScopes(apiKey)
+
+    requiredScope := "tools"
+    if tool != "chat" {
+        requiredScope = fmt.Sprintf("tools.%s", tool)
+    }
+
+    if !slices.Contains(scopes, requiredScope) {
+        return fmt.Errorf("insufficient trust for tool '%s'", tool)
+    }
+
+    return nil
+}
+```
+
+## 4. Implementation Tasks
+
+### 4.1 Backend Implementation
+```bash
+# Create required files:
+mkdir -p /home/xnet-admin/projects/ax/internal/serve
+touch /home/xnet-admin/projects/ax/internal/serve/tools.go
+touch /home/xnet-admin/projects/ax/internal/serve/agents.go
+touch /home/xnet-admin/projects/ax/internal/serve/auth.go
+
+# Add routes:
+cd /home/xnet-admin/projects/ax && go mod edit -require github.com/gorilla/mux
+```
+
+### 4.2 Critical Code Additions
+```go
+// internal/serve/tools.go
+package serve
+
+type ToolHandler struct {
+    engine *engine.Engine
+}
+
+func (h *ToolHandler) ExecuteTool(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        Tool      string                 `json:"tool"`
+        Parameters map[string]interface{} `json:"parameters"`
+        Trust    bool                   `json:"trust"`
+    }
+    json.NewDecoder(r.Body).Decode(&req)
+
+    if err := validateTrust(req.Tool, r); err != nil {
+        http.Error(w, err.Error(), http.StatusForbidden)
+        return
+    }
+
+    result, err := h.engine.ExecuteTool(r.Context(), req.Tool, req.Parameters)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    json.NewEncoder(w).Encode(result)
+}
+```
+
+## 5. Testing Verification
+
+### 5.1 Test Cases
+```bash
+# Test tool execution:
+curl -X POST \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"tool":"run_sh","parameters":{"command":"ls -la"},"trust":true}' \
+  http://localhost:8080/api/v1/tools/execute
+
+# Test agent spawning:
+curl -X POST \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"agents":["coder","security"],"task":"Review code"}' \
+  http://localhost:8080/api/v1/agents/spawn
+```
+
+## 6. Documentation Requirements
+
+### 6.1 API Documentation
+```markdown
+### Tool Execution Endpoint
+
+**Endpoint:** `POST /api/v1/tools/execute`
+
+**Parameters:**
+- `tool`: Name of tool to execute (run_sh, read_file, etc.)
+- `parameters`: Tool-specific parameters
+- `trust`: Boolean indicating if execution is trusted
+
+**Example Request:**
+```http
+POST /api/v1/tools/execute
+{
+  "tool": "run_sh",
+  "parameters": {"command": "echo 'hello'"},
+  "trust": true
+}
+```
+```
+
+## FILE VERIFICATION

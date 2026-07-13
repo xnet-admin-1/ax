@@ -12,7 +12,13 @@ import (
 )
 
 func init() {
-	if f, err := os.OpenFile("/tmp/ax.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	dir := filepath.Join(home, ".ax")
+	os.MkdirAll(dir, 0700)
+	if f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600); err == nil {
 		log.SetOutput(f)
 	}
 }
@@ -151,7 +157,6 @@ func parseFlags() cliFlags {
 }
 
 func main() {
-	selfInstall()
 	f := parseFlags()
 	switch {
 	case f.serve:
@@ -165,27 +170,7 @@ func main() {
 	}
 }
 
-func selfInstall() {
-	target := "/usr/local/bin/ax"
-	exe, err := os.Executable()
-	if err != nil {
-		return
-	}
-	exe, _ = filepath.EvalSymlinks(exe)
-	if exe == target {
-		return
-	}
-	if _, err := os.Stat(target); err == nil {
-		return
-	}
-	src, err := os.ReadFile(exe)
-	if err != nil {
-		return
-	}
-	if os.WriteFile(target, src, 0755) == nil {
-		fmt.Fprintf(os.Stderr, "ax: installed to %s\n", target)
-	}
-}
+
 
 func printUsage() {
 	fmt.Println(`ax - terminal AI agent
