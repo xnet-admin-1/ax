@@ -37,6 +37,8 @@ func (m *model) sendInput() (tea.Model, tea.Cmd) {
 		}
 		m.streaming = false
 		m.streamBuf = ""
+		m.streamRenderedCache = ""
+		m.streamRenderedBlocks = 0
 		m.activity = ""
 		m.streamGen++
 		m.eventCh = nil
@@ -53,6 +55,8 @@ func (m *model) sendInput() (tea.Model, tea.Cmd) {
 	m.msgs = append(m.msgs, chatMsg{role: "user", content: val})
 	m.streaming = true
 	m.streamBuf = ""
+	m.streamRenderedCache = ""
+	m.streamRenderedBlocks = 0
 	m.streamGen++
 
 	// Auto-generate title from first user message
@@ -73,6 +77,8 @@ func (m *model) sendInput() (tea.Model, tea.Cmd) {
 func (m *model) sendChat(content string) tea.Cmd {
 	m.streaming = true
 	m.streamBuf = ""
+	m.streamRenderedCache = ""
+	m.streamRenderedBlocks = 0
 	m.streamGen++
 	m.updateViewport()
 	return m.startChat(content)
@@ -154,6 +160,8 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		if m.streamBuf != "" {
 			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf, m.width)})
 			m.streamBuf = ""
+			m.streamRenderedCache = ""
+			m.streamRenderedBlocks = 0
 		}
 		toolBase := ev.ToolName
 		if idx := strings.IndexAny(toolBase, ":*"); idx >= 0 { toolBase = toolBase[:idx] }
@@ -214,6 +222,8 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		if m.streamBuf != "" {
 			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf, m.width)})
 			m.streamBuf = ""
+			m.streamRenderedCache = ""
+			m.streamRenderedBlocks = 0
 		}
 		m.streaming = false
 		m.activity = ""

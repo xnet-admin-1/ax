@@ -67,8 +67,10 @@ type model struct {
 	sessList  list.Model
 
 	streaming      bool
-	streamBuf      string
-	inReasoning    bool
+	streamBuf            string
+	streamRenderedCache  string
+	streamRenderedBlocks int
+	inReasoning          bool
 	showToolDetail bool
 	panel          panelType
 	settingsList list.Model
@@ -223,7 +225,7 @@ func (m *model) Init() tea.Cmd {
 			m.backend.SetModel(model)
 		}
 	}
-	cmds := []tea.Cmd{m.input.ta.Focus(), tea.EnableBracketedPaste, m.spinner.Tick, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })}
+	cmds := []tea.Cmd{m.input.ta.Focus(), tea.EnableBracketedPaste, m.spinner.Tick, tea.Tick(8*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })}
 	// Launch with agent handoff if specified
 	if m.launchAgent != "" {
 		cmds = append(cmds, func() tea.Msg {
@@ -317,7 +319,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.streaming || m.panel == panelAgents {
 			m.viewDirty = true
 			m.updateViewport()
-			return m, tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })
+			return m, tea.Tick(8*time.Millisecond, func(t time.Time) tea.Msg { return renderTickMsg(t) })
 		}
 		// Slow tick when idle (1s) for agent poll updates
 		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg { return renderTickMsg(t) })
@@ -493,6 +495,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.msgs = append(m.msgs, chatMsg{role: "user", content: content})
 			m.streaming = true
 			m.streamBuf = ""
+			m.streamRenderedCache = ""
+			m.streamRenderedBlocks = 0
 			if m.convTitle == "" || m.convTitle == "New Chat" {
 				title := content
 				if len(title) > 50 {
@@ -776,27 +780,29 @@ func (m *model) updateViewport() {
 			bubbleW = 40
 		}
 
-		// Incremental markdown: render completed blocks through Glamour,
-		// keep trailing incomplete text as plain wrapped text
+		// Incremental markdown: only re-render if new paragraph boundary detected
 		var rendered string
 		if m.glamRenderer != nil {
-			// Split on double newline — completed paragraphs/blocks
-			parts := strings.SplitN(display, "\n\n", -1)
-			if len(parts) > 1 {
-				// Completed blocks — render through Glamour
-				completed := strings.Join(parts[:len(parts)-1], "\n\n")
-				trailing := parts[len(parts)-1]
+			parts := strings.Split(display, "\n\n")
+			completedCount := len(parts) - 1
+			if completedCount > 0 && completedCount != m.streamRenderedBlocks {
+				// New completed block — re-render completed portion
+				completed := strings.Join(parts[:completedCount], "\n\n")
 				glamOut, err := m.glamRenderer.Render(completed)
 				if err == nil && strings.TrimSpace(glamOut) != "" {
-					rendered = strings.TrimRight(glamOut, "\n")
-					if trailing != "" {
-						rendered += "\n" + wrapText(trailing, bubbleW-4)
-					}
+					m.streamRenderedCache = strings.TrimRight(glamOut, "\n")
 				} else {
-					rendered = wrapText(display, bubbleW-4)
+					m.streamRenderedCache = wrapText(completed, bubbleW-4)
+				}
+				m.streamRenderedBlocks = completedCount
+			}
+			trailing := parts[len(parts)-1]
+			if m.streamRenderedCache != "" {
+				rendered = m.streamRenderedCache
+				if trailing != "" {
+					rendered += "\n" + wrapText(trailing, bubbleW-4)
 				}
 			} else {
-				// Single incomplete block — just wrap
 				rendered = wrapText(display, bubbleW-4)
 			}
 		} else {
