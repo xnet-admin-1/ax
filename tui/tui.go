@@ -771,14 +771,41 @@ func (m *model) updateViewport() {
 	content := m.cachedRender
 	if m.streaming && m.streamBuf != "" {
 		display := filterToolMarkup(m.streamBuf, w)
-		display = wrapText(display, w-6)
 		bubbleW := w - 6
 		if bubbleW < 40 {
 			bubbleW = 40
 		}
+
+		// Incremental markdown: render completed blocks through Glamour,
+		// keep trailing incomplete text as plain wrapped text
+		var rendered string
+		if m.glamRenderer != nil {
+			// Split on double newline — completed paragraphs/blocks
+			parts := strings.SplitN(display, "\n\n", -1)
+			if len(parts) > 1 {
+				// Completed blocks — render through Glamour
+				completed := strings.Join(parts[:len(parts)-1], "\n\n")
+				trailing := parts[len(parts)-1]
+				glamOut, err := m.glamRenderer.Render(completed)
+				if err == nil && strings.TrimSpace(glamOut) != "" {
+					rendered = strings.TrimRight(glamOut, "\n")
+					if trailing != "" {
+						rendered += "\n" + wrapText(trailing, bubbleW-4)
+					}
+				} else {
+					rendered = wrapText(display, bubbleW-4)
+				}
+			} else {
+				// Single incomplete block — just wrap
+				rendered = wrapText(display, bubbleW-4)
+			}
+		} else {
+			rendered = wrapText(display, bubbleW-4)
+		}
+
 		var sb strings.Builder
 		sb.WriteString(roleBadgeAssistant.Render(" AX ") + "\n")
-		sb.WriteString(streamingBorder(m.spinTick).Width(bubbleW).Padding(0, 1).Render(display) + "\n")
+		sb.WriteString(streamingBorder(m.spinTick).Width(bubbleW).Padding(0, 1).Render(rendered) + "\n")
 		content += sb.String()
 	}
 	m.vp.SetContent(content)
