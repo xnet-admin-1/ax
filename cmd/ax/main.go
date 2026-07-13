@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -109,7 +110,16 @@ func parseFlags() cliFlags {
 		case "-p", "--prompt":
 			if i+1 < len(args) {
 				i++
-				f.prompt = args[i]
+				// Consume all remaining args until next flag as the prompt
+				var parts []string
+				for ; i < len(args); i++ {
+					if len(args[i]) > 0 && args[i][0] == '-' {
+						i-- // back up so outer loop processes this flag
+						break
+					}
+					parts = append(parts, args[i])
+				}
+				f.prompt = strings.Join(parts, " ")
 			}
 		case "-a", "--agent":
 			if i+1 < len(args) {
