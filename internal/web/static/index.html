@@ -120,6 +120,10 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
 .roster-item{padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
 .roster-item .roster-name{font-weight:500;font-size:13px}
 .roster-item .roster-desc{font-size:11px;color:var(--text2)}
+.upload-btn{background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:50%;width:32px;height:32px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px}
+.upload-btn:hover{border-color:var(--primary);color:var(--primary)}
+.file-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:12px;font-size:12px;background:var(--card);border:1px solid var(--border);color:var(--text);margin-bottom:8px}
+.file-chip .file-chip-remove{background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:0 2px}
 @media(max-width:768px){
   .sidebar{position:fixed;left:-260px;top:0;bottom:0;z-index:100;transition:left .2s;width:260px}
   .sidebar.open{left:0}
@@ -143,6 +147,8 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
   <div class="input-area">
     <div class="mode-pills"><span class="mode-pill active" onclick="setMode('chat',this)">CHAT</span><span class="mode-pill" onclick="setMode('plan',this)">PLAN</span><span class="mode-pill" onclick="setMode('build',this)">BUILD</span></div>
     <div class="input-row">
+      <input type="file" id="fileInput" style="display:none" onchange="doFileUpload(this.files[0])">
+      <button class="upload-btn" onclick="triggerFileUpload()" title="Attach file">📎</button>
       <textarea id="input" rows="1" placeholder="Message..." onkeydown="handleKey(event)" oninput="autoGrow(this)"></textarea>
       <button class="send-btn" id="sendBtn" onclick="send()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
     </div>
@@ -160,7 +166,11 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
       <div class="modal-tab active" onclick="settingsTab('providers')">Providers</div>
       <div class="modal-tab" onclick="settingsTab('agent')">Agent</div>
       <div class="modal-tab" onclick="settingsTab('tools')">Tools</div>
+      <div class="modal-tab" onclick="settingsTab('mcp')">MCP</div>
       <div class="modal-tab" onclick="settingsTab('theme')">Theme</div>
+      <div class="modal-tab" onclick="settingsTab('batch')">Batch</div>
+      <div class="modal-tab" onclick="settingsTab('simulate')">Simulate</div>
+      <div class="modal-tab" onclick="settingsTab('toolsrun')">Tools Run</div>
     </div>
     <div class="modal-body" id="settingsBody"></div>
   </div>
@@ -616,11 +626,15 @@ function closeSettings(){document.getElementById('settingsModal').classList.remo
 
 function settingsTab(name){
   document.querySelectorAll('.modal-tab').forEach(function(t){t.classList.remove('active')});
-  document.querySelectorAll('.modal-tab').forEach(function(t){if(t.textContent.toLowerCase()===name||t.textContent===name.charAt(0).toUpperCase()+name.slice(1))t.classList.add('active')});
+  document.querySelectorAll('.modal-tab').forEach(function(t){if(t.textContent.toLowerCase()===name||t.textContent===name.charAt(0).toUpperCase()+name.slice(1)||(name==='toolsrun'&&t.textContent==='Tools Run'))t.classList.add('active')});
   if(name==='providers')renderProviderSettings();
   else if(name==='agent')renderAgentSettings();
   else if(name==='tools')renderToolSettings();
+  else if(name==='mcp')renderMCPSettings();
   else if(name==='theme')renderThemeSettings();
+  else if(name==='simulate')renderSimulateSettings();
+  else if(name==='batch')renderBatchSettings();
+  else if(name==='toolsrun')renderToolRunSettings();
 }
 
 async function renderProviderSettings(){
@@ -719,6 +733,132 @@ function toolToggle(name,trusted){
   fetch('/api/tools/'+encodeURIComponent(name),{method:'PUT',headers:authHeaders(),body:JSON.stringify({trusted:trusted})});
 }
 
+// === MCP Server Management ===
+async function renderMCPSettings(){
+  var body=document.getElementById('settingsBody');
+  body.innerHTML='<p style="color:var(--text2);font-size:12px">Loading MCP servers...</p>';
+  var r=await fetch('/api/tools',{headers:authHeaders()});
+  var tools=await r.json();
+
+  // Filter MCP tools (source !== 'builtin')
+  var mcpTools=tools.filter(function(t){return t.source&&t.source!=='builtin'});
+
+  // Group by server name (source field is the server identifier)
+  var servers={};
+  mcpTools.forEach(function(t){
+    var serverName=t.source||'unknown';
+    if(!servers[serverName])servers[serverName]={name:serverName,tools:[]};
+    servers[serverName].tools.push(t);
+  });
+
+  var serverList=Object.keys(servers);
+
+  var html='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">Manage MCP (Model Context Protocol) servers and their tools.</p>';
+
+  // Installed Servers
+  html+='<h4 style="font-size:13px;color:var(--text2);margin:12px 0 8px">Installed Servers ('+serverList.length+')</h4>';
+
+  if(serverList.length===0){
+    html+='<div style="padding:16px;border:1px solid var(--border);border-radius:8px;text-align:center;color:var(--text2);font-size:13px">No MCP servers installed</div>';
+  } else {
+    serverList.forEach(function(sName){
+      var s=servers[sName];
+      html+='<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center">';
+      html+='<div><div style="font-size:14px;font-weight:600">'+escHtml(sName)+'</div>';
+      html+='<div style="font-size:11px;color:var(--text2)">'+s.tools.length+' tool'+(s.tools.length!==1?'s':'')+'</div></div>';
+      html+='<div style="display:flex;gap:4px">';
+      html+='<button class="msg-act" onclick="mcpReconnect(\''+escHtml(sName)+'\')">Reconnect</button>';
+      html+='<button class="msg-act" style="color:var(--red)" onclick="mcpRemove(\''+escHtml(sName)+'\')">Remove</button>';
+      html+='</div></div>';
+      // Show tools list collapsed
+      html+='<details style="margin-top:6px"><summary style="font-size:11px;color:var(--text2);cursor:pointer">Tools</summary>';
+      html+='<div style="margin-top:4px">';
+      s.tools.forEach(function(t){
+        html+='<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">';
+        html+='<span style="font-family:monospace">'+escHtml(t.name)+'</span>';
+        html+='<span style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(t.description||'')+'</span>';
+        html+='</div>';
+      });
+      html+='</div></details>';
+      html+='</div>';
+    });
+  }
+
+  // Add New MCP Server Form
+  html+='<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">';
+  html+='<h4 style="font-size:13px;color:var(--text2);margin-bottom:8px">Add MCP Server</h4>';
+  html+='<div class="field"><label>Server Name</label><input id="mcp_name" placeholder="e.g. filesystem, github, slack"></div>';
+  html+='<div class="field"><label>Command</label><input id="mcp_command" placeholder="e.g. npx, uvx, /usr/local/bin/my-server"></div>';
+  html+='<div class="field"><label>Arguments (space-separated)</label><input id="mcp_args" placeholder="e.g. -y @modelcontextprotocol/server-filesystem /tmp"></div>';
+  html+='<div class="field"><label>Environment Variables (KEY=VALUE, one per line)</label><textarea id="mcp_env" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:12px;font-family:monospace;min-height:60px;resize:vertical" placeholder="GITHUB_TOKEN=ghp_xxx\nAPI_KEY=abc123"></textarea></div>';
+  html+='<button class="btn-primary" onclick="mcpInstall()">Install Server</button>';
+  html+='</div>';
+
+  body.innerHTML=html;
+}
+
+async function mcpInstall(){
+  var name=document.getElementById('mcp_name').value.trim();
+  var command=document.getElementById('mcp_command').value.trim();
+  var argsStr=document.getElementById('mcp_args').value.trim();
+  var envStr=document.getElementById('mcp_env').value.trim();
+
+  if(!name||!command){alert('Server name and command are required');return}
+
+  var args=argsStr?argsStr.split(/\s+/):[];
+  var env={};
+  if(envStr){
+    envStr.split('\n').forEach(function(line){
+      line=line.trim();
+      var idx=line.indexOf('=');
+      if(idx>0)env[line.slice(0,idx)]=line.slice(idx+1);
+    });
+  }
+
+  var payload={command:command,args:args,env:env};
+  var r=await fetch('/api/v1/mcp/'+encodeURIComponent(name),{
+    method:'POST',
+    headers:authHeaders(),
+    body:JSON.stringify({action:'install',config:payload})
+  });
+
+  if(r.ok){
+    renderMCPSettings();
+  } else {
+    var err=await r.text();
+    alert('Failed to install MCP server: '+err);
+  }
+}
+
+async function mcpReconnect(name){
+  var r=await fetch('/api/v1/mcp/'+encodeURIComponent(name),{
+    method:'POST',
+    headers:authHeaders(),
+    body:JSON.stringify({action:'reconnect'})
+  });
+  if(r.ok){
+    renderMCPSettings();
+  } else {
+    var err=await r.text();
+    alert('Failed to reconnect: '+err);
+  }
+}
+
+async function mcpRemove(name){
+  if(!confirm('Remove MCP server "'+name+'"? This will remove all its tools.'))return;
+  var r=await fetch('/api/v1/mcp/'+encodeURIComponent(name),{
+    method:'DELETE',
+    headers:authHeaders()
+  });
+  if(r.ok){
+    renderMCPSettings();
+  } else {
+    var err=await r.text();
+    alert('Failed to remove: '+err);
+  }
+}
+
 function renderThemeSettings(){
   var body=document.getElementById('settingsBody');
   var current=localStorage.getItem('ax_theme')||'dark';
@@ -727,10 +867,163 @@ function renderThemeSettings(){
   }).join('');
 }
 
+function renderToolRunSettings(){
+  var body=document.getElementById('settingsBody');
+  var tools=['run_sh','read_file','write_file','edit_file','list_dir','search_web'];
+  var html='<div class="field"><label for="tr_tool">Tool</label><select id="tr_tool" onchange="updateToolRunFields()" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px">';
+  tools.forEach(function(t){html+='<option value="'+t+'">'+t+'</option>'});
+  html+='</select></div>';
+  html+='<div id="tr_fields"></div>';
+  html+='<div class="field" style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="tr_trust"> Trust (skip confirmation)</label></div>';
+  html+='<button class="btn-primary" onclick="doToolRun()" style="width:100%">Execute</button>';
+  html+='<div id="tr_results" style="margin-top:12px"></div>';
+  body.innerHTML=html;
+  updateToolRunFields();
+}
+
+function updateToolRunFields(){
+  var tool=document.getElementById('tr_tool').value;
+  var container=document.getElementById('tr_fields');
+  var html='';
+  if(tool==='run_sh'){
+    html='<div class="field"><label for="tr_command">Command</label><input id="tr_command" placeholder="e.g. ls -la"></div>';
+  }else if(tool==='read_file'){
+    html='<div class="field"><label for="tr_path">Path</label><input id="tr_path" placeholder="/path/to/file"></div>';
+  }else if(tool==='write_file'){
+    html='<div class="field"><label for="tr_path">Path</label><input id="tr_path" placeholder="/path/to/file"></div>';
+    html+='<div class="field"><label for="tr_content">Content</label><textarea id="tr_content" rows="5" placeholder="File content..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical;font-family:monospace"></textarea></div>';
+  }else if(tool==='edit_file'){
+    html='<div class="field"><label for="tr_path">Path</label><input id="tr_path" placeholder="/path/to/file"></div>';
+    html+='<div class="field"><label for="tr_search">Search</label><textarea id="tr_search" rows="3" placeholder="Text to find..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical;font-family:monospace"></textarea></div>';
+    html+='<div class="field"><label for="tr_replace">Replace</label><textarea id="tr_replace" rows="3" placeholder="Replacement text..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical;font-family:monospace"></textarea></div>';
+  }else if(tool==='list_dir'){
+    html='<div class="field"><label for="tr_path">Path</label><input id="tr_path" placeholder="/path/to/directory"></div>';
+  }else if(tool==='search_web'){
+    html='<div class="field"><label for="tr_query">Query</label><input id="tr_query" placeholder="Search query..."></div>';
+  }
+  container.innerHTML=html;
+}
+
+async function doToolRun(){
+  var tool=document.getElementById('tr_tool').value;
+  var trust=document.getElementById('tr_trust').checked;
+  var params={};
+  if(tool==='run_sh'){
+    params.command=(document.getElementById('tr_command')||{}).value||'';
+  }else if(tool==='read_file'){
+    params.path=(document.getElementById('tr_path')||{}).value||'';
+  }else if(tool==='write_file'){
+    params.path=(document.getElementById('tr_path')||{}).value||'';
+    params.content=(document.getElementById('tr_content')||{}).value||'';
+  }else if(tool==='edit_file'){
+    params.path=(document.getElementById('tr_path')||{}).value||'';
+    params.search=(document.getElementById('tr_search')||{}).value||'';
+    params.replace=(document.getElementById('tr_replace')||{}).value||'';
+  }else if(tool==='list_dir'){
+    params.path=(document.getElementById('tr_path')||{}).value||'';
+  }else if(tool==='search_web'){
+    params.query=(document.getElementById('tr_query')||{}).value||'';
+  }
+  var resultsEl=document.getElementById('tr_results');
+  resultsEl.innerHTML='<div style="color:var(--text2);font-size:12px">Executing...</div>';
+  var startTime=Date.now();
+  try{
+    var r=await fetch('/api/v1/tools/execute',{method:'POST',headers:authHeaders(),body:JSON.stringify({tool:tool,parameters:params,trust:trust})});
+    var elapsed=r.headers.get('X-Request-Time-Ms')||((Date.now()-startTime)+'');
+    var data=await r.json();
+    var output=typeof data==='string'?data:JSON.stringify(data,null,2);
+    resultsEl.innerHTML='<div style="font-size:11px;color:var(--text2);margin-bottom:4px">Completed in '+elapsed+'ms</div><pre style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-wrap:break-word;max-height:300px;overflow-y:auto;color:'+(r.ok?'var(--text)':'var(--red)')+'">'+escHtml(output)+'</pre>';
+  }catch(err){
+    resultsEl.innerHTML='<pre style="background:var(--card);border:1px solid var(--red);border-radius:6px;padding:10px;font-size:12px;color:var(--red);white-space:pre-wrap">Error: '+escHtml(err.message)+'</pre>';
+  }
+}
+
 function applyTheme(t){
   localStorage.setItem('ax_theme',t);
   document.documentElement.setAttribute('data-theme',t==='light'?'light':'');
   renderThemeSettings();
+}
+
+async function renderSimulateSettings(){
+  var body=document.getElementById('settingsBody');
+  body.innerHTML='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">Dry Run / Simulate — preview what would be sent to the LLM without executing.</p><div class="field"><label for="sim_prompt">Prompt</label><textarea id="sim_prompt" rows="4" placeholder="Enter a prompt to simulate..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical;font-family:inherit"></textarea></div><div class="field"><label for="sim_model">Model</label><select id="sim_model" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px"></select></div><div class="field"><label>Tools to include</label><div id="sim_tools" style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px"></div></div><button class="btn-primary" onclick="doSimulate()" style="width:100%">Simulate</button><div id="sim_results" style="margin-top:12px"></div>';
+
+  // Populate models
+  var r=await fetch('/api/models',{headers:authHeaders()});
+  var models=await r.json();
+  var sel=document.getElementById('sim_model');
+  sel.innerHTML=models.map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
+
+  // Populate tools
+  var r2=await fetch('/api/tools',{headers:authHeaders()});
+  var tools=await r2.json();
+  var toolsDiv=document.getElementById('sim_tools');
+  toolsDiv.innerHTML=tools.map(function(t){return '<label style="display:block;font-size:12px;padding:2px 0;cursor:pointer"><input type="checkbox" class="sim_tool_cb" value="'+escHtml(t.name)+'" checked> '+escHtml(t.name)+'</label>'}).join('');
+}
+
+async function doSimulate(){
+  var prompt=document.getElementById('sim_prompt').value.trim();
+  if(!prompt){alert('Please enter a prompt');return}
+  var model=document.getElementById('sim_model').value;
+  var tools=Array.from(document.querySelectorAll('.sim_tool_cb:checked')).map(function(c){return c.value});
+
+  var resultsDiv=document.getElementById('sim_results');
+  resultsDiv.innerHTML='<div style="color:var(--text2);font-size:12px">Simulating...</div>';
+
+  try{
+    var r=await fetch('/api/v1/simulate',{method:'POST',headers:authHeaders(),body:JSON.stringify({prompt:prompt,model:model,tools:tools})});
+    if(!r.ok){var err=await r.text();resultsDiv.innerHTML='<div style="color:var(--red);font-size:12px">Error: '+escHtml(err)+'</div>';return}
+    var data=await r.json();
+    resultsDiv.innerHTML='<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--card)">'+
+      '<div style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:8px">Simulation Result</div>'+
+      '<div style="font-size:12px;margin-bottom:4px"><strong>Model:</strong> '+escHtml(data.model||'N/A')+'</div>'+
+      '<div style="font-size:12px;margin-bottom:4px"><strong>Endpoint:</strong> '+escHtml(data.endpoint||'N/A')+'</div>'+
+      '<div style="font-size:12px;margin-bottom:4px"><strong>Estimated Tokens:</strong> '+(data.estimated_tokens||'N/A')+'</div>'+
+      '<div style="font-size:12px;margin-bottom:4px"><strong>Tools Available:</strong> '+(data.tools_available||0)+'</div>'+
+      '</div>';
+  }catch(e){
+    resultsDiv.innerHTML='<div style="color:var(--red);font-size:12px">Error: '+escHtml(e.message)+'</div>';
+  }
+}
+
+function renderBatchSettings(){
+  var body=document.getElementById('settingsBody');
+  body.innerHTML='<p style="font-size:12px;color:var(--text2);margin-bottom:12px">Batch Processing — run multiple prompts in sequence.</p>'+
+    '<div class="field"><label for="batch_prompts">Prompts (one per line)</label>'+
+    '<textarea id="batch_prompts" rows="6" placeholder="Enter one prompt per line..." style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;resize:vertical;font-family:inherit"></textarea></div>'+
+    '<div class="field"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" id="batch_trust"> Trust tools</label></div>'+
+    '<button class="btn-primary" onclick="doBatch()" style="width:100%">Run Batch</button>'+
+    '<div id="batch_results" style="margin-top:12px"></div>';
+}
+
+async function doBatch(){
+  var text=document.getElementById('batch_prompts').value.trim();
+  if(!text){alert('Please enter at least one prompt');return}
+  var lines=text.split('\n').map(function(l){return l.trim()}).filter(function(l){return l.length>0});
+  var trust=document.getElementById('batch_trust').checked;
+  var resultsDiv=document.getElementById('batch_results');
+  resultsDiv.innerHTML='<div style="color:var(--text2);font-size:12px">Running batch ('+lines.length+' prompts)...</div>';
+
+  try{
+    var r=await fetch('/api/v1/batch',{method:'POST',headers:authHeaders(),body:JSON.stringify({prompts:lines,trust:trust})});
+    if(!r.ok){var err=await r.text();resultsDiv.innerHTML='<div style="color:var(--red);font-size:12px">Error: '+escHtml(err)+'</div>';return}
+    var data=await r.json();
+    var results=data.results||data||[];
+    resultsDiv.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:8px">Results ('+results.length+')</div>'+
+      results.map(function(item,i){
+        var prompt=item.prompt||lines[i]||'';
+        var response=item.response||item.result||item.error||'No response';
+        var isErr=!!item.error;
+        return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--card)">'+
+          '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px">Prompt '+(i+1)+':</div>'+
+          '<div style="font-size:13px;margin-bottom:6px;padding:4px 8px;background:var(--surface);border-radius:4px">'+escHtml(prompt)+'</div>'+
+          '<div style="font-size:12px;font-weight:600;color:'+(isErr?'var(--red)':'var(--green)')+';margin-bottom:4px">'+(isErr?'Error':'Response')+':</div>'+
+          '<div style="font-size:13px;white-space:pre-wrap;max-height:200px;overflow-y:auto;padding:4px 8px;background:var(--surface);border-radius:4px">'+escHtml(response)+'</div>'+
+          '</div>';
+      }).join('');
+  }catch(e){
+    resultsDiv.innerHTML='<div style="color:var(--red);font-size:12px">Error: '+escHtml(e.message)+'</div>';
+  }
 }
 
 function updateSetting(key,value){
@@ -780,6 +1073,72 @@ async function doLogin(){
   else{document.getElementById('loginErr').style.display='block'}
 }
 
+// --- File Upload ---
+var pendingAttachment=null; // {name, path}
+
+function triggerFileUpload(){
+  document.getElementById('fileInput').click();
+}
+
+async function doFileUpload(file){
+  if(!file)return;
+  var formData=new FormData();
+  formData.append('file',file);
+  try{
+    var h={};if(authToken)h['Authorization']='Bearer '+authToken;
+    var r=await fetch('/api/v1/files/upload',{method:'POST',headers:h,body:formData});
+    if(r.ok){
+      var data=await r.json();
+      pendingAttachment={name:data.name||file.name,path:data.path||data.name||file.name};
+      updateFileChip();
+    }else{
+      alert('File upload failed: '+r.statusText);
+    }
+  }catch(e){
+    alert('File upload error: '+e.message);
+  }
+  document.getElementById('fileInput').value='';
+}
+
+function removeAttachment(){
+  pendingAttachment=null;
+  updateFileChip();
+}
+
+function updateFileChip(){
+  var chip=document.getElementById('fileChip');
+  if(!chip){
+    chip=document.createElement('div');chip.id='fileChip';
+    document.querySelector('.mode-pills').after(chip);
+  }
+  if(pendingAttachment){
+    chip.innerHTML='<span class="file-chip">📎 '+escHtml(pendingAttachment.name)+'<button class="file-chip-remove" onclick="removeAttachment()">×</button></span>';
+  }else{
+    chip.innerHTML='';
+  }
+}
+
+// Patch send to include attachment
+var _origSend=send;
+send=function(){
+  if(streaming){ws.send(JSON.stringify({type:'chat.cancel',conversationId:convId}));return}
+  var text=input.value.trim();if(!text&&!pendingImages.length&&!pendingAttachment)return;
+  var displayText=text||(pendingImages.length?pendingImages.length+' image(s)':'');
+  if(pendingAttachment){
+    text='[Attached: '+pendingAttachment.name+' ('+pendingAttachment.path+')]\n\n'+text;
+  }
+  addMsg('user',displayText||(pendingAttachment?pendingAttachment.name:''));
+  var payload={type:'chat.send',conversationId:convId,content:text,mode:mode};
+  if(pendingImages.length){payload.images=pendingImages;pendingImages=[];updateImagePreview()}
+  if(pendingAttachment){pendingAttachment=null;updateFileChip()}
+  ws.send(JSON.stringify(payload));
+  input.value='';input.style.height='44px';
+  streaming=true;
+  var btn=document.getElementById('sendBtn');
+  btn.className='send-btn streaming';
+  btn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+};
+
 // Apply saved theme
 if(localStorage.getItem('ax_theme')==='light')document.documentElement.setAttribute('data-theme','light');
 
@@ -787,3 +1146,4 @@ connect();setupImageInput();checkAuth().then(function(ok){if(ok){loadConversatio
 </script>
 </body>
 </html>
+
