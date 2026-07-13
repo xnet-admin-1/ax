@@ -780,14 +780,14 @@ func (m *model) updateViewport() {
 			bubbleW = 40
 		}
 
-		// Incremental markdown: only re-render if new paragraph boundary detected
+		// Incremental markdown: only re-render if new line detected
 		var rendered string
 		if m.glamRenderer != nil {
-			parts := strings.Split(display, "\n\n")
+			parts := strings.Split(display, "\n")
 			completedCount := len(parts) - 1
 			if completedCount > 0 && completedCount != m.streamRenderedBlocks {
-				// New completed block — re-render completed portion
-				completed := strings.Join(parts[:completedCount], "\n\n")
+				// New completed line — re-render completed portion
+				completed := strings.Join(parts[:completedCount], "\n")
 				glamOut, err := m.glamRenderer.Render(completed)
 				if err == nil && strings.TrimSpace(glamOut) != "" {
 					m.streamRenderedCache = strings.TrimRight(glamOut, "\n")
@@ -800,7 +800,7 @@ func (m *model) updateViewport() {
 			if m.streamRenderedCache != "" {
 				rendered = m.streamRenderedCache
 				if trailing != "" {
-					rendered += "\n" + wrapText(trailing, bubbleW-4)
+					rendered += "\n" + trailing
 				}
 			} else {
 				rendered = wrapText(display, bubbleW-4)
