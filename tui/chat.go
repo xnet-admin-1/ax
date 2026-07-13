@@ -148,21 +148,25 @@ func renderAsTree(lines []string) string {
 }
 
 func isTabular(lines []string) bool {
-	if len(lines) < 2 {
+	if len(lines) < 3 {
 		return false
 	}
-	// Check if lines have consistent tab or multi-space separation
-	cols := strings.Fields(lines[0])
-	if len(cols) < 2 {
-		return false
-	}
-	consistent := 0
-	for _, l := range lines[1:] {
-		if len(strings.Fields(l)) == len(cols) {
-			consistent++
+	// Only detect real tables: lines with consistent tab-separation or pipe-delimited
+	// Check for tab-separated values
+	tabCount := 0
+	firstTabs := strings.Count(lines[0], "\t")
+	if firstTabs >= 1 {
+		for _, l := range lines[1:] {
+			if strings.Count(l, "\t") == firstTabs {
+				tabCount++
+			}
+		}
+		if tabCount > len(lines)*2/3 {
+			return true
 		}
 	}
-	return consistent > len(lines)/2
+	// Don't detect whitespace-aligned text as tables — too many false positives
+	return false
 }
 
 func renderAsTable(lines []string, width int) string {
