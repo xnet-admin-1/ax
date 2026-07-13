@@ -253,6 +253,16 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			}
 			// Detect text-mode tool calls (model outputs JSON instead of using function calling)
 			if parsed := detectTextToolCalls(content); len(parsed) > 0 {
+				// Emit any content BEFORE the tool call as assistant text
+				preContent := extractPreToolContent(content)
+				if preContent != "" {
+					ch <- Event{Type: "delta", Delta: preContent}
+				}
+				// Flush pre-content as assistant message if present
+				if preContent != "" {
+					messages = append(messages, Message{Role: "assistant", Content: preContent})
+					l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", preContent, time.Now().Unix())
+				}
 				for _, tc := range parsed {
 					ch <- Event{Type: "tool_call", Tool: tc.name, ToolName: tc.name, ToolArgs: tc.argsRaw}
 					textToolCtx := &llm.ToolContext{
@@ -273,7 +283,8 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 						result = "error: " + err.Error()
 					}
 					ch <- Event{Type: "tool_result", Tool: tc.name, ToolName: tc.name, ToolResult: result}
-					messages = append(messages, Message{Role: "assistant", Content: content})
+					// Only include tool call marker in messages, not the full content with prose
+					messages = append(messages, Message{Role: "assistant", Content: "", ToolCalls: []ToolCall{{ID: tc.name, Type: "function", Function: FunctionCall{Name: tc.name, Arguments: tc.argsRaw}}}})
 					messages = append(messages, Message{Role: "tool", Content: truncateToolResult(result), Name: tc.name, ToolCallID: tc.name})
 				}
 				content = ""
@@ -889,6 +900,43 @@ type textToolCall struct {
 	name    string
 	args    map[string]any
 	argsRaw string
+}
+
+// extractPreToolContent returns any text content that appears before the first
+// tool call marker in the response. This ensures the model's prose isn't swallowed.
+func extractPreToolContent(content string) string {
+	// Strip thinking blocks first
+	stripped := regexp.MustCompile(`(?s)<think>.*?</think>`).ReplaceAllString(content, "")
+	stripped = regexp.MustCompile(`(?s)<thought>.*?</thought>`).ReplaceAllString(stripped, "")
+	stripped = regexp.MustCompile(`(?s)<reasoning>.*?</reasoning>`).ReplaceAllString(stripped, "")
+
+	// Find the earliest tool call marker
+	markers := []string{"[TOOL_CALLS]", "<function="}
+	earliest := -1
+	for _, marker := range markers {
+		idx := strings.Index(stripped, marker)
+		if idx >= 0 && (earliest < 0 || idx < earliest) {
+			earliest = idx
+		}
+	}
+	// Also check for JSON tool calls: {"name":
+	if idx := strings.Index(stripped, `{"name"`); idx >= 0 && (earliest < 0 || idx < earliest) {
+		// Only count it if it looks like a tool call line
+		lineStart := strings.LastIndex(stripped[:idx], "\n")
+		if lineStart < 0 {
+			lineStart = 0
+		}
+		line := strings.TrimSpace(stripped[lineStart:])
+		if strings.HasPrefix(line, "{") {
+			earliest = lineStart
+		}
+	}
+
+	if earliest <= 0 {
+		return ""
+	}
+	pre := strings.TrimSpace(stripped[:earliest])
+	return pre
 }
 
 func detectTextToolCalls(content string) []textToolCall {
