@@ -911,7 +911,12 @@ func extractPreToolContent(content string) string {
 	stripped = regexp.MustCompile(`(?s)<reasoning>.*?</reasoning>`).ReplaceAllString(stripped, "")
 
 	// Find the earliest tool call marker
-	markers := []string{"[TOOL_CALLS]", "<function="}
+	markers := []string{
+		"[TOOL_CALLS]",
+		"<function=",
+		"<tool_call>",
+		"<minimax:tool_call>",
+	}
 	earliest := -1
 	for _, marker := range markers {
 		idx := strings.Index(stripped, marker)
@@ -921,14 +926,25 @@ func extractPreToolContent(content string) string {
 	}
 	// Also check for JSON tool calls: {"name":
 	if idx := strings.Index(stripped, `{"name"`); idx >= 0 && (earliest < 0 || idx < earliest) {
-		// Only count it if it looks like a tool call line
 		lineStart := strings.LastIndex(stripped[:idx], "\n")
 		if lineStart < 0 {
 			lineStart = 0
 		}
 		line := strings.TrimSpace(stripped[lineStart:])
-		if strings.HasPrefix(line, "{") {
-			earliest = lineStart
+		if strings.HasPrefix(line, "{") && (strings.Contains(line, `"arguments"`) || strings.Contains(line, `"parameters"`)) {
+			if lineStart > 0 {
+				earliest = lineStart
+			} else {
+				earliest = idx
+			}
+		}
+	}
+	// Check for ```json tool call blocks
+	if idx := strings.Index(stripped, "```json"); idx >= 0 && (earliest < 0 || idx < earliest) {
+		// Only count if it contains a tool call pattern
+		afterBlock := stripped[idx:]
+		if strings.Contains(afterBlock, `"name"`) && (strings.Contains(afterBlock, `"arguments"`) || strings.Contains(afterBlock, `"parameters"`)) {
+			earliest = idx
 		}
 	}
 
@@ -946,15 +962,13 @@ func detectTextToolCalls(content string) []textToolCall {
 	stripped := regexp.MustCompile(`(?s)<think>.*?</think>`).ReplaceAllString(content, "")
 	stripped = regexp.MustCompile(`(?s)<thought>.*?</thought>`).ReplaceAllString(stripped, "")
 	stripped = regexp.MustCompile(`(?s)<reasoning>.*?</reasoning>`).ReplaceAllString(stripped, "")
-	// Also strip unclosed blocks (model was thinking but stream ended)
 	stripped = regexp.MustCompile(`(?s)<think>.*$`).ReplaceAllString(stripped, "")
 	stripped = regexp.MustCompile(`(?s)<thought>.*$`).ReplaceAllString(stripped, "")
 	stripped = regexp.MustCompile(`(?s)<reasoning>.*$`).ReplaceAllString(stripped, "")
 
-	// Format 1: [TOOL_CALLS]toolname{json}
+	// Format 1: [TOOL_CALLS]toolname{json} (Mistral)
 	if idx := strings.Index(stripped, "[TOOL_CALLS]"); idx >= 0 {
 		rest := stripped[idx+12:]
-		// Find tool name (everything before the first {)
 		braceIdx := strings.Index(rest, "{")
 		if braceIdx > 0 {
 			name := strings.TrimSpace(rest[:braceIdx])
@@ -966,35 +980,32 @@ func detectTextToolCalls(content string) []textToolCall {
 		}
 	}
 
-	// Format 2: JSON objects with "name" and "parameters" on a line
+	// Format 2: <tool_call>{"name":"x","arguments":{...}}</tool_call> (Qwen/Hermes)
 	if len(found) == 0 {
-		for _, line := range strings.Split(stripped, "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "{") && strings.Contains(line, `"name"`) && (strings.Contains(line, `"parameters"`) || strings.Contains(line, `"parameter"`)) {
-				var tc struct {
-					Name       string         `json:"name"`
-					Parameters map[string]any `json:"parameters"`
-					Parameter  map[string]any `json:"parameter"`
+		tcRe := regexp.MustCompile(`(?s)<tool_call>\s*(\{.*?\})\s*</tool_call>`)
+		for _, match := range tcRe.FindAllStringSubmatch(stripped, -1) {
+			var tc struct {
+				Name       string         `json:"name"`
+				Arguments  map[string]any `json:"arguments"`
+				Parameters map[string]any `json:"parameters"`
+			}
+			if json.Unmarshal([]byte(match[1]), &tc) == nil && tc.Name != "" {
+				args := tc.Arguments
+				if args == nil {
+					args = tc.Parameters
 				}
-				if json.Unmarshal([]byte(line), &tc) == nil && tc.Name != "" {
-					args := tc.Parameters
-					if args == nil {
-						args = tc.Parameter
-					}
-					found = append(found, textToolCall{name: tc.Name, args: args, argsRaw: line})
-				}
+				found = append(found, textToolCall{name: tc.Name, args: args, argsRaw: match[1]})
 			}
 		}
 	}
 
-	// Format 3: <function=name> <parameter=key>value (XML-like, used by some models)
+	// Format 3: <function=name> <parameter=key>value (ChatGPT-like XML)
 	if len(found) == 0 {
 		funcRe := regexp.MustCompile(`<function=([^>]+)>`)
 		paramRe := regexp.MustCompile(`<parameter=([^>]+)>([^<]*)`)
 		funcMatches := funcRe.FindAllStringSubmatchIndex(stripped, -1)
 		for _, match := range funcMatches {
 			name := stripped[match[2]:match[3]]
-			// Find parameters after this function tag
 			rest := stripped[match[1]:]
 			args := map[string]any{}
 			paramMatches := paramRe.FindAllStringSubmatch(rest, -1)
@@ -1006,6 +1017,72 @@ func detectTextToolCalls(content string) []textToolCall {
 			if len(args) > 0 {
 				raw, _ := json.Marshal(args)
 				found = append(found, textToolCall{name: name, args: args, argsRaw: string(raw)})
+			}
+		}
+	}
+
+	// Format 4: <minimax:tool_call><invoke name="x"><parameter name="k">v</parameter></invoke></minimax:tool_call>
+	if len(found) == 0 {
+		blockRe := regexp.MustCompile(`(?s)<minimax:tool_call>(.*?)</minimax:tool_call>`)
+		invokeRe := regexp.MustCompile(`(?s)<invoke name=["']?([^"'>]+)["']?>(.*?)</invoke>`)
+		paramRe := regexp.MustCompile(`(?s)<parameter name=["']?([^"'>]+)["']?>(.*?)</parameter>`)
+		for _, block := range blockRe.FindAllStringSubmatch(stripped, -1) {
+			for _, invoke := range invokeRe.FindAllStringSubmatch(block[1], -1) {
+				name := strings.TrimSpace(invoke[1])
+				args := map[string]any{}
+				for _, param := range paramRe.FindAllStringSubmatch(invoke[2], -1) {
+					args[strings.TrimSpace(param[1])] = strings.TrimSpace(param[2])
+				}
+				if len(args) > 0 {
+					raw, _ := json.Marshal(args)
+					found = append(found, textToolCall{name: name, args: args, argsRaw: string(raw)})
+				}
+			}
+		}
+	}
+
+	// Format 5: ```json blocks with "name" and "arguments"/"parameters"
+	if len(found) == 0 {
+		codeRe := regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*?\\})\\s*```")
+		for _, match := range codeRe.FindAllStringSubmatch(stripped, -1) {
+			var tc struct {
+				Name       string         `json:"name"`
+				Arguments  map[string]any `json:"arguments"`
+				Parameters map[string]any `json:"parameters"`
+			}
+			if json.Unmarshal([]byte(match[1]), &tc) == nil && tc.Name != "" {
+				args := tc.Arguments
+				if args == nil {
+					args = tc.Parameters
+				}
+				if args != nil {
+					found = append(found, textToolCall{name: tc.Name, args: args, argsRaw: match[1]})
+				}
+			}
+		}
+	}
+
+	// Format 6: Standalone JSON {"name":"x","arguments":{...}} or {"name":"x","parameters":{...}}
+	if len(found) == 0 {
+		for _, line := range strings.Split(stripped, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "{") && strings.Contains(line, `"name"`) && (strings.Contains(line, `"arguments"`) || strings.Contains(line, `"parameters"`) || strings.Contains(line, `"parameter"`)) {
+				var tc struct {
+					Name       string         `json:"name"`
+					Arguments  map[string]any `json:"arguments"`
+					Parameters map[string]any `json:"parameters"`
+					Parameter  map[string]any `json:"parameter"`
+				}
+				if json.Unmarshal([]byte(line), &tc) == nil && tc.Name != "" {
+					args := tc.Arguments
+					if args == nil {
+						args = tc.Parameters
+					}
+					if args == nil {
+						args = tc.Parameter
+					}
+					found = append(found, textToolCall{name: tc.Name, args: args, argsRaw: line})
+				}
 			}
 		}
 	}

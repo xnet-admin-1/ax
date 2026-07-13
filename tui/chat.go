@@ -267,6 +267,14 @@ func filterToolMarkup(s string, width int) string {
 	// Strip <function=name> <parameter=key>value format (models outputting tool calls as text)
 	result = regexp.MustCompile(`(?s)<function=[^>]+>.*?(?:</function>|$)`).ReplaceAllString(result, "")
 	result = regexp.MustCompile(`<parameter=[^>]+>[^<]*`).ReplaceAllString(result, "")
+	// Strip <tool_call>...</tool_call> (Qwen/Hermes format)
+	result = regexp.MustCompile(`(?s)<tool_call>.*?</tool_call>`).ReplaceAllString(result, "")
+	// Strip <minimax:tool_call>...</minimax:tool_call>
+	result = regexp.MustCompile(`(?s)<minimax:tool_call>.*?</minimax:tool_call>`).ReplaceAllString(result, "")
+	// Strip [TOOL_CALLS]... (Mistral format)
+	result = regexp.MustCompile(`(?s)\[TOOL_CALLS\].*$`).ReplaceAllString(result, "")
+	// Strip standalone JSON tool calls {"name":"x","arguments":{...}}
+	result = regexp.MustCompile(`(?s)\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"(?:arguments|parameters)"\s*:\s*\{.*?\}\s*\}`).ReplaceAllString(result, "")
 	for _, marker := range []string{"<|tool_call", "<|im_end", "<|assistant", "<|function_call"} {
 		for {
 			idx := strings.Index(result, marker)
