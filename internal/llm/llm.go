@@ -433,6 +433,11 @@ func executeTaskPlan(args map[string]any) string {
 				tasks = append(tasks, TaskPlanItem{ID: fmt.Sprintf("%d", i+1), Text: v})
 			case map[string]any:
 				text, _ := v["task_description"].(string)
+				if text == "" { text, _ = v["text"].(string) }
+				if text == "" { text, _ = v["task"].(string) }
+				if text == "" { text, _ = v["name"].(string) }
+				if text == "" { text, _ = v["description"].(string) }
+				if text == "" { text = fmt.Sprintf("%v", v) }
 				details, _ := v["details"].(string)
 				tasks = append(tasks, TaskPlanItem{ID: fmt.Sprintf("%d", i+1), Text: text, Details: details})
 			}
@@ -495,6 +500,11 @@ func executeTaskPlan(args map[string]any) string {
 				ActivePlan.Tasks = append(ActivePlan.Tasks, TaskPlanItem{ID: fmt.Sprintf("%d", nextID), Text: v})
 			case map[string]any:
 				text, _ := v["task_description"].(string)
+				if text == "" { text, _ = v["text"].(string) }
+				if text == "" { text, _ = v["task"].(string) }
+				if text == "" { text, _ = v["name"].(string) }
+				if text == "" { text, _ = v["description"].(string) }
+				if text == "" { text = fmt.Sprintf("%v", v) }
 				details, _ := v["details"].(string)
 				ActivePlan.Tasks = append(ActivePlan.Tasks, TaskPlanItem{ID: fmt.Sprintf("%d", nextID), Text: text, Details: details})
 			}
