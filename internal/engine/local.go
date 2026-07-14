@@ -165,18 +165,23 @@ func (l *Local) GetMessages(convID string) ([]Message, error) {
 				m.ToolCallID = toolID.String
 			}
 		}
-		// Include tool results (truncated) for context continuity
-		if m.Role == "tool" {
-			if len(m.Content) > 500 {
-				m.Content = m.Content[:500] + "...[truncated]"
+		// Restore ToolCalls on assistant messages
+		if m.Role == "assistant" && toolID.Valid && toolID.String != "" {
+			var tc []ToolCall
+			if json.Unmarshal([]byte(toolID.String), &tc) == nil && len(tc) > 0 {
+				m.ToolCalls = tc
 			}
-			// Reconstruct as user message for models that don't support tool role
-			m.Role = "user"
-			m.Content = "[Tool result: " + m.Name + "]\n" + m.Content
+		}
+		// Keep tool messages as-is for Bedrock compatibility
+		if m.Role == "tool" {
+			if len(m.Content) > 2000 {
+				m.Content = m.Content[:2000] + "...[truncated]"
+			}
 			out = append(out, m)
 			continue
 		}
-		if m.Role == "assistant" && m.Content == "" {
+		// Skip truly empty assistant messages (no content AND no tool calls)
+		if m.Role == "assistant" && m.Content == "" && len(m.ToolCalls) == 0 {
 			continue
 		}
 		out = append(out, m)
@@ -232,9 +237,17 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 	defer func() { l.mu.Lock(); delete(l.cancels, convID); l.mu.Unlock() }()
 	messages, _ := l.GetMessages(convID)
 	// Cap history: ~200 tokens/msg avg, keep 75% of 64k context budget = 240 msgs
-	maxMsgs := 240
-	if cfg, ok := l.GetModelConfig(); ok && cfg.ContextTokens > 0 {
-		maxMsgs = (cfg.ContextTokens * 75 / 100) / 200
+	// Determine context window based on model
+	ctxWindow := contextLimit
+	if IsBedrockProvider(apiBase) {
+		meta := GetBedrockModelMeta(model)
+		if meta.ContextWindow > 0 {
+			ctxWindow = meta.ContextWindow
+		}
+	}
+	maxMsgs := (ctxWindow * 75 / 100) / 200
+	if maxMsgs < 20 {
+		maxMsgs = 20
 	}
 	if len(messages) > maxMsgs {
 		messages = messages[len(messages)-maxMsgs:]
@@ -248,7 +261,18 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 		// Compact messages if approaching context limit (keeps tools working at high token counts)
 		messages = l.compactIfNeeded(ctx, apiBase, apiKey, model, messages)
 
-		content, toolCalls, tokens, finishReason, err := l.stream(ctx, apiBase, apiKey, model, messages, ch)
+		var content string
+		var toolCalls []ToolCall
+		var tokens int
+		var finishReason string
+		var err error
+
+		if IsBedrockProvider(apiBase) {
+			region := ParseBedrockRegion(apiBase)
+			content, toolCalls, tokens, finishReason, err = l.bedrockStream(ctx, region, apiKey, model, messages, ch)
+		} else {
+			content, toolCalls, tokens, finishReason, err = l.stream(ctx, apiBase, apiKey, model, messages, ch)
+		}
 		if err != nil {
 			ch <- Event{Type: "error", Error: err.Error()}
 			return
@@ -331,11 +355,9 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 		messages = append(messages, Message{Role: "assistant", Content: content, ToolCalls: toolCalls})
 		// Persist assistant tool-call message immediately for crash recovery
 		tcJSON, _ := json.Marshal(toolCalls)
-		// Only persist assistant message if it has real content
-		if content != "" {
-			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)",
-				convID, "assistant", content, string(tcJSON), time.Now().Unix())
-		}
+		// Always persist assistant messages (tool calls need to be in history)
+		l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)",
+			convID, "assistant", content, string(tcJSON), time.Now().Unix())
 		for _, tc := range toolCalls {
 			ch <- Event{Type: "tool_call", Tool: tc.ID, ToolName: tc.Function.Name, ToolArgs: tc.Function.Arguments}
 			var args map[string]any
@@ -415,7 +437,15 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 // silently dropping tool use when the context gets too large.
 func (l *Local) compactIfNeeded(ctx context.Context, apiBase, apiKey, model string, messages []Message) []Message {
 	est := estimateTokens(messages)
-	threshold := contextLimit * 75 / 100 // 75% = ~150k tokens
+	// Use model-specific context window
+	ctxWindow := contextLimit
+	if IsBedrockProvider(apiBase) {
+		meta := GetBedrockModelMeta(model)
+		if meta.ContextWindow > 0 {
+			ctxWindow = meta.ContextWindow
+		}
+	}
+	threshold := ctxWindow * 75 / 100
 
 	if est < threshold {
 		return messages
@@ -740,6 +770,18 @@ func truncateToolResult(s string) string {
 }
 
 func (l *Local) maybeAutoTitle(convID, apiBase, apiKey, model string, ch chan Event) {
+	// Skip LLM-based auto-title for Bedrock (uses first user message instead)
+	if IsBedrockProvider(apiBase) {
+		var firstMsg string
+		l.DB.QueryRow("SELECT content FROM messages WHERE conv_id=? AND role='user' ORDER BY created_at LIMIT 1", convID).Scan(&firstMsg)
+		if firstMsg != "" {
+			title := firstMsg
+			if len(title) > 50 { title = title[:50] }
+			l.DB.Exec("UPDATE conversations SET title=? WHERE id=?", title, convID)
+			ch <- Event{Type: "title", Delta: title}
+		}
+		return
+	}
 	// Check if conversation has only 2 messages (user + assistant) = new conversation
 	var count int
 	l.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE conv_id=?", convID).Scan(&count)
