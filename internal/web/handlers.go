@@ -87,6 +87,32 @@ func (h *Handlers) SetModel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
+// TruncateMessages deletes messages after a given index (for edit/resend)
+func (h *Handlers) TruncateMessages(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
+	if convID == "" {
+		http.Error(w, "missing id", 400)
+		return
+	}
+	var body struct {
+		After int `json:"after"` // keep this many messages, delete the rest
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.After < 0 {
+		http.Error(w, "invalid body", 400)
+		return
+	}
+	// Get the created_at of the Nth message to use as cutoff
+	var cutoff int64
+	err := h.DB.QueryRow("SELECT created_at FROM messages WHERE conv_id=? ORDER BY created_at LIMIT 1 OFFSET ?", convID, body.After-1).Scan(&cutoff)
+	if err != nil {
+		// If offset is beyond message count, nothing to delete
+		w.WriteHeader(200)
+		return
+	}
+	h.DB.Exec("DELETE FROM messages WHERE conv_id=? AND created_at > ?", convID, cutoff)
+	w.WriteHeader(200)
+}
+
 // DeleteConversation deletes a conversation and its messages
 func (h *Handlers) DeleteConversation(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")

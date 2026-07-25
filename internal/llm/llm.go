@@ -53,6 +53,7 @@ type Provider interface {
 
 type ToolContext struct {
 	DB                interface{}
+	Ctx               context.Context
 	ShellOutputLimit  int
 	FileReadLimit     int
 	FetchLimit        int
@@ -200,7 +201,11 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 				}
 			}
 		}
-		c, cancel := context.WithTimeout(context.Background(), timeout)
+		parentCtx := ctx.Ctx
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		c, cancel := context.WithTimeout(parentCtx, timeout)
 		defer cancel()
 		cmd := exec.CommandContext(c, "bash", "-c", command)
 		if ctx.OnProgress != nil {

@@ -137,7 +137,7 @@ func runChatLoop(ctx context.Context, eng *engine.Engine, backend *engine.Local,
 		msgs = append([]engine.Message{{Role: "system", Content: sys}}, msgs...)
 	}
 
-	maxIterations := 25 // prevent infinite tool loops
+	maxIterations := 200 // safety cap for runaway loops
 	for iter := 0; iter < maxIterations; iter++ {
 		var content strings.Builder
 		var calls []engine.ToolCall

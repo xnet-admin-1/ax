@@ -6,6 +6,7 @@ import (
 
 // BridgeEvents reads from an engine event channel and sends WS messages to the client
 func BridgeEvents(ch <-chan engine.Event, client *Client, convID string) {
+	endSent := false
 	for ev := range ch {
 		switch ev.Type {
 		case "delta":
@@ -43,13 +44,13 @@ func BridgeEvents(ch <-chan engine.Event, client *Client, convID string) {
 				IsError:        isErr,
 			})
 		case "end":
+			endSent = true
 			client.Send(StreamEndMsg{
 				Type:           MsgStreamEnd,
 				ConversationID: convID,
 				Usage:          UsageDTO{TotalTokens: ev.TotalTokens},
 			})
 		case "confirm":
-			// Auto-approve in web mode (no confirm UI yet)
 			if ev.ConfirmCh != nil {
 				ev.ConfirmCh <- true
 			}
@@ -60,7 +61,6 @@ func BridgeEvents(ch <-chan engine.Event, client *Client, convID string) {
 				Error:          ev.Error,
 			})
 		case "progress":
-			// Send as tool_result update
 			if ev.ToolName != "" {
 				client.Send(StreamToolResultMsg{
 					Type:           MsgStreamResult,
@@ -69,6 +69,19 @@ func BridgeEvents(ch <-chan engine.Event, client *Client, convID string) {
 					Result:         ev.ToolResult,
 				})
 			}
+		case "title":
+			client.Send(ConvUpdatedMsg{
+				Type:  MsgConvUpdated,
+				ID:    convID,
+				Title: ev.Delta,
+			})
 		}
+	}
+	// Ensure stream.end is always sent so the UI finalizes
+	if !endSent {
+		client.Send(StreamEndMsg{
+			Type:           MsgStreamEnd,
+			ConversationID: convID,
+		})
 	}
 }

@@ -130,6 +130,114 @@ func (l *Local) bedrockStream(ctx context.Context, region, apiKey, model string,
 		})
 	}
 
+	// Validate tool_use/tool_result pairing:
+	// 1. Every assistant tool_use must have a matching tool_result in the next user message
+	// 2. tool_results must not exceed the tool_use count of the preceding assistant
+	var validatedMsgs []types.Message
+	for i := 0; i < len(bedrockMsgs); i++ {
+		msg := bedrockMsgs[i]
+
+		if msg.Role == types.ConversationRoleAssistant {
+			// Collect tool_use IDs from this assistant message
+			toolUseIDs := make(map[string]bool)
+			for _, block := range msg.Content {
+				if tu, ok := block.(*types.ContentBlockMemberToolUse); ok {
+					toolUseIDs[aws.ToString(tu.Value.ToolUseId)] = true
+				}
+			}
+			validatedMsgs = append(validatedMsgs, msg)
+
+			if len(toolUseIDs) > 0 {
+				// Check if next message is a user message with tool_results
+				nextHasToolResults := false
+				if i+1 < len(bedrockMsgs) && bedrockMsgs[i+1].Role == types.ConversationRoleUser {
+					for _, block := range bedrockMsgs[i+1].Content {
+						if _, ok := block.(*types.ContentBlockMemberToolResult); ok {
+							nextHasToolResults = true
+							break
+						}
+					}
+				}
+
+				if nextHasToolResults {
+					// Filter tool_results to only include ones matching this assistant's tool_use IDs
+					nextMsg := bedrockMsgs[i+1]
+					var filteredContent []types.ContentBlock
+					for _, block := range nextMsg.Content {
+						if tr, ok := block.(*types.ContentBlockMemberToolResult); ok {
+							id := aws.ToString(tr.Value.ToolUseId)
+							if toolUseIDs[id] {
+								filteredContent = append(filteredContent, block)
+								delete(toolUseIDs, id)
+							} else {
+								debug.D.Warn("bedrock: dropping extra tool_result id=%s at message %d", id, i+1)
+							}
+						} else {
+							filteredContent = append(filteredContent, block)
+						}
+					}
+					// Add dummy results for any tool_use IDs that weren't matched
+					for id := range toolUseIDs {
+						filteredContent = append(filteredContent, &types.ContentBlockMemberToolResult{
+							Value: types.ToolResultBlock{
+								ToolUseId: aws.String(id),
+								Content: []types.ToolResultContentBlock{
+									&types.ToolResultContentBlockMemberText{Value: "error: tool call was interrupted"},
+								},
+							},
+						})
+					}
+					if len(filteredContent) > 0 {
+						validatedMsgs = append(validatedMsgs, types.Message{
+							Role:    types.ConversationRoleUser,
+							Content: filteredContent,
+						})
+					}
+					i++ // skip the next message since we processed it
+				} else {
+					// Next message is plain text or missing — insert dummy tool_results
+					var dummyResults []types.ContentBlock
+					for id := range toolUseIDs {
+						dummyResults = append(dummyResults, &types.ContentBlockMemberToolResult{
+							Value: types.ToolResultBlock{
+								ToolUseId: aws.String(id),
+								Content: []types.ToolResultContentBlock{
+									&types.ToolResultContentBlockMemberText{Value: "error: tool call was interrupted"},
+								},
+							},
+						})
+					}
+					validatedMsgs = append(validatedMsgs, types.Message{
+						Role:    types.ConversationRoleUser,
+						Content: dummyResults,
+					})
+					debug.D.Warn("bedrock: inserted %d dummy tool_results before plain user message at %d", len(dummyResults), i)
+				}
+			}
+		} else {
+			validatedMsgs = append(validatedMsgs, msg)
+		}
+	}
+	bedrockMsgs = validatedMsgs
+
+	// Debug: log message structure
+	for i, msg := range bedrockMsgs {
+		var desc string
+		for _, b := range msg.Content {
+			switch b.(type) {
+			case *types.ContentBlockMemberText:
+				desc += "T "
+			case *types.ContentBlockMemberToolUse:
+				desc += "TU "
+			case *types.ContentBlockMemberToolResult:
+				desc += "TR "
+			}
+		}
+		if i < 35 || strings.Contains(desc, "TU") || strings.Contains(desc, "TR") {
+			debug.D.Verbose("bedrock msg[%d] role=%s blocks=[%s]", i, msg.Role, desc)
+		}
+	}
+
 	// Build tool config
 	toolSpecs := l.getBedrockTools()
 	debug.D.Info("bedrock: %d tools configured", len(toolSpecs))
@@ -158,7 +266,24 @@ func (l *Local) bedrockStream(ctx context.Context, region, apiKey, model string,
 
 	// If model doesn't support streaming tools, stream without toolConfig
 	// (model can still respond with text, just can't make tool calls)
+	// If model doesn't support streaming tools, route to sync Converse (with tools)
+	// or stream without tools if no tool blocks exist in history
 	if !meta.StreamingTools {
+		hasToolBlocks := false
+		for _, msg := range bedrockMsgs {
+			for _, block := range msg.Content {
+				switch block.(type) {
+				case *types.ContentBlockMemberToolUse, *types.ContentBlockMemberToolResult:
+					hasToolBlocks = true
+				}
+				if hasToolBlocks { break }
+			}
+			if hasToolBlocks { break }
+		}
+		if hasToolBlocks || input.ToolConfig != nil {
+			// Use sync Converse with tools (model supports tool use, just not streaming)
+			return l.bedrockConverseSync(ctx, client, input, ch)
+		}
 		input.ToolConfig = nil
 	}
 
@@ -224,12 +349,6 @@ func (l *Local) bedrockStream(ctx context.Context, region, apiKey, model string,
 						Arguments: args,
 					},
 				})
-				ch <- Event{
-					Type:     "tool_call",
-					Tool:     currentToolUseID,
-					ToolName: currentToolName,
-					ToolArgs: args,
-				}
 				currentToolName = ""
 				currentToolUseID = ""
 			}
@@ -264,12 +383,6 @@ func (l *Local) bedrockStream(ctx context.Context, region, apiKey, model string,
 				Arguments: args,
 			},
 		})
-		ch <- Event{
-			Type:     "tool_call",
-			Tool:     currentToolUseID,
-			ToolName: currentToolName,
-			ToolArgs: args,
-		}
 		if finishReason == "" || finishReason == "end_turn" {
 			finishReason = "tool_calls"
 		}
@@ -523,7 +636,7 @@ func GetBedrockModelMeta(model string) BedrockModelMeta {
 	}
 	// OpenAI on Bedrock
 	if strings.Contains(lower, "openai") || strings.Contains(lower, "gpt") {
-		return BedrockModelMeta{MaxTokens: 16384, ContextWindow: 128000, StreamingTools: false, SystemSupported: true}
+		return BedrockModelMeta{MaxTokens: 16384, ContextWindow: 128000, StreamingTools: true, SystemSupported: true, Reasoning: true}
 	}
 	// NVIDIA
 	if strings.Contains(lower, "nvidia") || strings.Contains(lower, "nemotron") {

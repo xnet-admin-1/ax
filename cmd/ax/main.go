@@ -113,6 +113,10 @@ func parseFlags() cliFlags {
 				f.model = args[i]
 			}
 		case "-p", "--prompt":
+			if f.serve {
+				// In serve mode, -p is port, not prompt — leave it for serve.go
+				break
+			}
 			if i+1 < len(args) {
 				i++
 				// Consume all remaining args until next flag as the prompt

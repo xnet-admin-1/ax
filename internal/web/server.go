@@ -87,6 +87,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /api/conversations", s.requireAuth(s.Handlers.ListConversations))
 	mux.HandleFunc("GET /api/conversations/{id}/messages", s.requireAuth(s.Handlers.GetMessages))
 	mux.HandleFunc("DELETE /api/conversations/{id}", s.requireAuth(s.Handlers.DeleteConversation))
+	mux.HandleFunc("POST /api/conversations/{id}/truncate", s.requireAuth(s.Handlers.TruncateMessages))
 	mux.HandleFunc("PUT /api/conversations/{id}", s.requireAuth(s.Handlers.RenameConversation))
 	mux.HandleFunc("GET /api/models", s.requireAuth(s.Handlers.ListModels))
 	mux.HandleFunc("POST /api/model", s.requireAuth(s.Handlers.SetModel))
@@ -224,10 +225,14 @@ func (s *Server) handleMessage(client *Client, data []byte) {
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return
 		}
+		log.Printf("ws: cancel received for conv=%s", msg.ConversationID)
 		s.mu.Lock()
 		if cancel, ok := s.sessions[msg.ConversationID]; ok {
 			cancel()
 			delete(s.sessions, msg.ConversationID)
+			log.Printf("ws: cancelled session for conv=%s", msg.ConversationID)
+		} else {
+			log.Printf("ws: no active session for conv=%s (sessions=%d)", msg.ConversationID, len(s.sessions))
 		}
 		s.mu.Unlock()
 
@@ -329,9 +334,12 @@ func (s *Server) handleChatSend(client *Client, msg ChatSendMsg) {
 		ConversationID: convID,
 	})
 
-	// Start chat with cancellation
+	// Start chat with cancellation — cancel any existing session first
 	ctx, cancel := context.WithCancel(context.Background())
 	s.mu.Lock()
+	if oldCancel, ok := s.sessions[convID]; ok {
+		oldCancel() // cancel the previous turn
+	}
 	s.sessions[convID] = cancel
 	s.mu.Unlock()
 

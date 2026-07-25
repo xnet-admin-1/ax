@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>AX</title>
 <script src="marked.min.js"></script>
 <link rel="stylesheet" href="github-dark.min.css">
@@ -51,7 +51,7 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
 .msg-act{background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer}
 .msg-act:hover{color:var(--text);border-color:var(--text2)}
 .tool-strip{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0;max-width:100%}
-.tool-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;font-size:11px;font-family:monospace;border:1px solid var(--border);color:var(--text2);cursor:pointer;position:relative;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tool-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;font-size:11px;font-family:monospace;border:1px solid var(--border);color:var(--text2);cursor:pointer;position:relative;max-width:100%;text-overflow:ellipsis;white-space:nowrap}
 .tool-chip.running{border-color:var(--primary);color:var(--primary)}
 .tool-chip.done{border-color:var(--green);color:var(--green)}
 .tool-chip.error{border-color:var(--red);color:var(--red)}
@@ -129,6 +129,28 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
   .sidebar.open{left:0}
   .msg-wrap{max-width:95%}
   .menu-btn{display:block!important}
+  .main{padding-bottom:env(safe-area-inset-bottom)}
+  .messages{padding:12px 8px;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+  .input-area{padding:8px;padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+  .main-hdr{padding:8px 12px}
+  .msg{padding:8px 10px;font-size:13px}
+  .agent-panel{position:fixed;right:0;top:0;bottom:0;width:280px;z-index:100}
+  .modal{width:95%;max-width:none;margin:10px}
+  body{padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+}
+@media(max-width:480px){
+  .msg-wrap{max-width:100%}
+  .messages{padding:8px 4px}
+  .input-area{padding:6px 4px;padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+  .main-hdr .title{font-size:12px}
+  .hdr-btn{padding:4px 6px;font-size:12px}
+  .tool-chip{font-size:10px;padding:2px 6px}
+}
+@media(max-height:500px){
+  .input-area{padding:4px 8px;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+  .messages{padding:4px 8px}
+  .main-hdr{padding:4px 12px}
+  .msg{padding:6px 10px;font-size:13px}
 }
 </style>
 </head>
@@ -141,7 +163,7 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
   <div class="main-hdr">
     <span class="title" id="title"><button class="msg-act menu-btn" onclick="toggleSidebar()" style="display:none;margin-right:8px;font-size:16px;padding:4px 8px">☰</button><button class="expand-btn" id="expandBtn" onclick="expandSidebar()" style="display:none">»</button>AX<span id="activeModel" style="color:var(--text2);font-weight:400;font-size:12px"></span></span>
     <div style="display:flex;gap:6px;align-items:center"><button class="hdr-btn" onclick="toggleAgentPanel()" title="Agents">A</button><button class="hdr-btn" onclick="toggleTheme()" title="Toggle theme">◐</button><button class="hdr-btn" onclick="openSettings()" title="Settings">⚙</button></div>
-    <select class="model-sel" id="modelSel" style="display:none"></select>
+    <select class="model-sel" id="modelSel" name="model" style="display:none"></select>
   </div>
   <div class="messages" id="messages"><div class="empty">Send a message to start</div></div>
   <div class="input-area">
@@ -149,7 +171,7 @@ body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);hei
     <div class="input-row">
       <input type="file" id="fileInput" style="display:none" onchange="doFileUpload(this.files[0])">
       <button class="upload-btn" onclick="triggerFileUpload()" title="Attach file">📎</button>
-      <textarea id="input" rows="1" placeholder="Message..." onkeydown="handleKey(event)" oninput="autoGrow(this)"></textarea>
+      <textarea id="input" name="message" rows="1" placeholder="Message..." onkeydown="handleKey(event)" oninput="autoGrow(this)"></textarea>
       <button class="send-btn" id="sendBtn" onclick="send()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
     </div>
   </div>
@@ -193,6 +215,9 @@ function handle(d){
       convId=d.conversation.id;
       loadConversations();
       break;
+    case 'conversation.updated':
+      loadConversations();
+      break;
     case 'stream.start':
       streamEl=addMsg('assistant','');
       streamEl.dataset.raw='';
@@ -218,22 +243,28 @@ function handle(d){
       break;
     case 'stream.tool_result':
       if(d.toolCallId&&document.getElementById('orchStages')){updateOrchestrate(d.result)}
-      var chips=document.querySelectorAll('[data-tcid="'+d.toolCallId+'"].running');
-      var tcel=chips.length?chips[chips.length-1]:document.getElementById('tc-'+d.toolCallId);
+      var tcel=document.querySelector('[data-tcid="'+d.toolCallId+'"]');
       if(tcel){
         tcel.className='tool-chip '+(d.isError?'error':'done');
-        var det=document.createElement('div');det.className='tool-detail';det.textContent=d.result;
-        tcel.appendChild(det);
+        var det=tcel.querySelector('.tool-detail');
+        if(!det){det=document.createElement('div');det.className='tool-detail';tcel.appendChild(det)}
+        det.textContent=d.result;
       }
       break;
     case 'stream.end':
       streaming=false;
-      if(streamEl&&streamEl.dataset.reasoning){
-        var r=streamEl.querySelector('.reasoning');
-        if(r){r.className='reasoning';r.removeAttribute('open');r.querySelector('summary').textContent='Thought'}
-      }
-      // Add actions to completed message
-      if(streamEl&&streamEl.dataset.raw){
+      // Final render
+      if(streamEl){
+        // Final render - ensure content is visible
+        var finalHtml='';
+        if(streamEl.dataset.reasoning){
+          finalHtml+='<details class="reasoning"><summary>Thought</summary><div class="reasoning-text">'+escHtml(streamEl.dataset.reasoning)+'</div></details>';
+        }
+        if(streamEl.dataset.raw){
+          finalHtml+=marked.parse(streamEl.dataset.raw);
+        }
+        if(finalHtml)streamEl.innerHTML=finalHtml;
+        // Add action buttons
         var acts=document.createElement('div');acts.className='msg-actions';
         acts.innerHTML='<button class="msg-act" onclick="copyMsg(this)">Copy</button><button class="msg-act" onclick="retryMsg()">Retry</button>';
         streamEl.parentNode.appendChild(acts);
@@ -261,21 +292,16 @@ function handle(d){
 
 var streamRaf=0;
 function renderStream(){
-  if(streamRaf)return;
-  var delay=(streamEl&&streamEl.dataset.raw.length>2000)?200:16;
-  streamRaf=setTimeout(function(){
-    streamRaf=0;
-    if(!streamEl)return;
-    var html='';
-    if(streamEl.dataset.reasoning){
-      html+='<details class="reasoning active" open><summary>Thinking...</summary><div class="reasoning-text">'+escHtml(streamEl.dataset.reasoning)+'</div></details>';
-    }
-    if(streamEl.dataset.raw){
-      html+=marked.parse(streamEl.dataset.raw);
-    }
-    streamEl.innerHTML=html;
-    msgs.scrollTop=msgs.scrollHeight;
-  },delay);
+  if(!streamEl)return;
+  var html='';
+  if(streamEl.dataset.reasoning){
+    html+='<details class="reasoning active" open><summary>Thinking...</summary><div class="reasoning-text">'+escHtml(streamEl.dataset.reasoning)+'</div></details>';
+  }
+  if(streamEl.dataset.raw){
+    html+=marked.parse(streamEl.dataset.raw);
+  }
+  streamEl.innerHTML=html;
+  msgs.scrollTop=msgs.scrollHeight;
 }
 
 function addMsg(role,content){
@@ -298,8 +324,12 @@ function addMsg(role,content){
 }
 
 function send(){
-  if(streaming){ws.send(JSON.stringify({type:'chat.cancel',conversationId:convId}));return}
-  var text=input.value.trim();if(!text&&!pendingImages.length)return;
+  var text=input.value.trim();
+  // If streaming and no text, just cancel (stop button behavior)
+  if(streaming&&!text){ws.send(JSON.stringify({type:'chat.cancel',conversationId:convId}));streaming=false;if(streamEl&&streamEl.dataset.raw){streamEl.innerHTML=marked.parse(streamEl.dataset.raw)}streamEl=null;document.getElementById('sendBtn').className='send-btn';document.getElementById('sendBtn').innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';return}
+  // If streaming and has text, cancel then send new message (steering)
+  if(streaming&&text){ws.send(JSON.stringify({type:'chat.cancel',conversationId:convId}));streaming=false;streamEl=null;}
+  if(!text&&!pendingImages.length)return;
   addMsg('user',text||(pendingImages.length+' image(s)'));
   var payload={type:'chat.send',conversationId:convId,content:text,mode:mode};
   if(pendingImages.length){payload.images=pendingImages;pendingImages=[];updateImagePreview()}
@@ -311,7 +341,7 @@ function send(){
   btn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
 }
 
-function newChat(){convId='';msgs.innerHTML='<div class="empty">Send a message to start</div>';document.getElementById('title').textContent='AX'}
+function newChat(){convId='';msgs.innerHTML='<div class="empty">Send a message to start</div>';loadModels()}
 function handleKey(e){if(e.key==='Enter'&&e.ctrlKey){e.preventDefault();send()}}
 function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,160)+'px'}
 function escHtml(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
@@ -330,15 +360,42 @@ function editMsg(btn){
   wrap.querySelector('.edit-area').focus();
 }
 function submitEdit(btn){
-  var text=btn.closest('.msg-wrap').querySelector('.edit-area')?.value;
+  var wrap=btn.closest('.msg-wrap');
+  var text=wrap.querySelector('.edit-area')?.value;
   if(!text||streaming)return;
+  // Count messages before this one to truncate DB
+  var allWraps=Array.from(document.querySelectorAll('.msg-wrap'));
+  var idx=allWraps.indexOf(wrap);
+  if(idx>=0&&convId){fetch('/api/conversations/'+convId+'/truncate',{method:'POST',headers:authHeaders(),body:JSON.stringify({after:idx})})}
+  // Remove this message and all subsequent messages from the DOM
+  var parent=wrap.parentNode;
+  while(parent.lastChild!==wrap)parent.removeChild(parent.lastChild);
+  parent.removeChild(wrap);
   addMsg('user',text);
   ws.send(JSON.stringify({type:'chat.send',conversationId:convId,content:text,mode:mode}));
   streaming=true;document.getElementById('sendBtn').className='send-btn streaming';
 }
 function retryMsg(){
   if(streaming||!convId)return;
-  ws.send(JSON.stringify({type:'chat.regenerate',conversationId:convId}));
+  // Remove last assistant message from DOM
+  var wraps=document.querySelectorAll('.msg-wrap.asst-wrap');
+  if(wraps.length){
+    var lastWrap=wraps[wraps.length-1];
+    var acts=lastWrap.nextElementSibling;
+    if(acts&&acts.className==='msg-actions')acts.remove();
+    lastWrap.remove();
+  }
+  // Truncate DB to remove the last assistant response
+  var allWraps=document.querySelectorAll('.msg-wrap');
+  fetch('/api/conversations/'+convId+'/truncate',{method:'POST',headers:authHeaders(),body:JSON.stringify({after:allWraps.length})});
+  // Get last user message and resend
+  var userWraps=document.querySelectorAll('.msg-wrap.user-wrap');
+  if(userWraps.length){
+    var lastUser=userWraps[userWraps.length-1].querySelector('.msg');
+    var text=lastUser.dataset.raw||lastUser.textContent;
+    ws.send(JSON.stringify({type:'chat.send',conversationId:convId,content:text,mode:mode}));
+    streaming=true;document.getElementById('sendBtn').className='send-btn streaming';
+  }
 }
 
 async function loadConversations(){
@@ -352,6 +409,7 @@ async function loadConv(id){
   msgs.innerHTML='';
   data.forEach(function(m){if(m.role==='user'||m.role==='assistant')addMsg(m.role,m.content)});
   loadConversations();
+  loadModels();
 }
 async function loadModels(){
   var r=await fetch("/api/models",{headers:authHeaders()});var data=await r.json();

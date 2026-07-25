@@ -26,7 +26,7 @@ func runServe() {
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "-P", "--port":
+		case "-p", "-P", "--port":
 			if i+1 < len(args) {
 				i++
 				fmt.Sscanf(args[i], "%d", &port)

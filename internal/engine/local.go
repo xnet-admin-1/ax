@@ -258,6 +258,12 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 		messages = append([]Message{{Role: "system", Content: sys}}, messages...)
 	}
 	for {
+		// Check cancellation before each iteration
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		// Compact messages if approaching context limit (keeps tools working at high token counts)
 		messages = l.compactIfNeeded(ctx, apiBase, apiKey, model, messages)
 
@@ -346,9 +352,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			}
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", content, time.Now().Unix())
 			// Auto-title: if this is the first assistant response in a new conversation
-			if content != "" {
-				l.maybeAutoTitle(convID, apiBase, apiKey, model, ch)
-			}
+			l.maybeAutoTitle(convID, apiBase, apiKey, model, ch)
 			ch <- Event{Type: "end", Tokens: tokens}
 			return
 		}
@@ -359,10 +363,18 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 		l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)",
 			convID, "assistant", content, string(tcJSON), time.Now().Unix())
 		for _, tc := range toolCalls {
+			// Check if cancelled before executing each tool
+			select {
+			case <-ctx.Done():
+				ch <- Event{Type: "error", Error: "cancelled"}
+				return
+			default:
+			}
 			ch <- Event{Type: "tool_call", Tool: tc.ID, ToolName: tc.Function.Name, ToolArgs: tc.Function.Arguments}
 			var args map[string]any
 			json.Unmarshal([]byte(tc.Function.Arguments), &args)
 			toolCtx := &llm.ToolContext{
+				Ctx:               ctx,
 				ShellOutputLimit:  8000,
 				FileReadLimit:     32000,
 				TrustAll:          l.TrustAll,
@@ -429,6 +441,8 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			messages = append(messages, Message{Role: "tool", Content: truncateToolResult(result), Name: tc.Function.Name, ToolCallID: tc.ID})
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", truncateToolResult(result), tc.Function.Name+"|"+tc.ID, time.Now().Unix())
 		}
+		// Emit separator so next response content doesn't visually concatenate
+		ch <- Event{Type: "delta", Delta: "\n\n"}
 	}
 }
 
