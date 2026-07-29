@@ -208,6 +208,17 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 		c, cancel := context.WithTimeout(parentCtx, timeout)
 		defer cancel()
 		cmd := exec.CommandContext(c, "bash", "-c", command)
+		// Prevent the child from inheriting our terminal stdin.
+		// Without this, interactive/blocking commands (e.g. ssh, less, top)
+		// will read from the TUI's stdin causing display corruption and CPU spin.
+		devnull, err := os.Open(os.DevNull)
+		if err == nil {
+			cmd.Stdin = devnull
+			defer devnull.Close()
+		}
+		// Put child in its own process group so it cannot acquire the
+		// controlling terminal or receive our signal group's signals.
+		IsolateCmd(cmd)
 		if ctx.OnProgress != nil {
 			stdout, _ := cmd.StdoutPipe()
 			cmd.Stderr = cmd.Stdout
@@ -217,13 +228,13 @@ func ExecuteTool(name string, args map[string]any, ctx *ToolContext) (string, er
 			var out strings.Builder
 			buf := make([]byte, 4096)
 			for {
-				n, err := stdout.Read(buf)
+				n, readErr := stdout.Read(buf)
 				if n > 0 {
 					chunk := string(buf[:n])
 					out.WriteString(chunk)
 					ctx.OnProgress("run_sh", chunk)
 				}
-				if err != nil {
+				if readErr != nil {
 					break
 				}
 			}

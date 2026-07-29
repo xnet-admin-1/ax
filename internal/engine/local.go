@@ -257,6 +257,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 	if sys != "" {
 		messages = append([]Message{{Role: "system", Content: sys}}, messages...)
 	}
+	var totalTokens int
 	for {
 		// Check cancellation before each iteration
 		select {
@@ -278,6 +279,9 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			content, toolCalls, tokens, finishReason, err = l.bedrockStream(ctx, region, apiKey, model, messages, ch)
 		} else {
 			content, toolCalls, tokens, finishReason, err = l.stream(ctx, apiBase, apiKey, model, messages, ch)
+		}
+		if tokens > 0 {
+			totalTokens = tokens
 		}
 		if err != nil {
 			ch <- Event{Type: "error", Error: err.Error()}
@@ -353,7 +357,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)", convID, "assistant", content, time.Now().Unix())
 			// Auto-title: if this is the first assistant response in a new conversation
 			l.maybeAutoTitle(convID, apiBase, apiKey, model, ch)
-			ch <- Event{Type: "end", Tokens: tokens}
+			ch <- Event{Type: "end", Tokens: totalTokens}
 			return
 		}
 		messages = append(messages, Message{Role: "assistant", Content: content, ToolCalls: toolCalls})
@@ -441,8 +445,6 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			messages = append(messages, Message{Role: "tool", Content: truncateToolResult(result), Name: tc.Function.Name, ToolCallID: tc.ID})
 			l.DB.Exec("INSERT INTO messages(conv_id,role,content,tool_id,created_at) VALUES(?,?,?,?,?)", convID, "tool", truncateToolResult(result), tc.Function.Name+"|"+tc.ID, time.Now().Unix())
 		}
-		// Emit separator so next response content doesn't visually concatenate
-		ch <- Event{Type: "delta", Delta: "\n\n"}
 	}
 }
 

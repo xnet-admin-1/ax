@@ -72,17 +72,37 @@ func (l *Local) bedrockStream(ctx context.Context, region, apiKey, model string,
 		if m.Role == "assistant" {
 			role = types.ConversationRoleAssistant
 		}
-		// Handle tool_result messages — combine ALL consecutive into single user message
+		// Handle tool_result messages — group consecutive ones, but only include
+		// those whose IDs match the preceding assistant's tool_use blocks.
 		if m.Role == "tool" {
+			// Find the preceding assistant message's tool_use IDs
+			precedingToolUseIDs := make(map[string]bool)
+			for j := len(bedrockMsgs) - 1; j >= 0; j-- {
+				if bedrockMsgs[j].Role == types.ConversationRoleAssistant {
+					for _, block := range bedrockMsgs[j].Content {
+						if tu, ok := block.(*types.ContentBlockMemberToolUse); ok {
+							precedingToolUseIDs[aws.ToString(tu.Value.ToolUseId)] = true
+						}
+					}
+					break
+				}
+			}
+
 			var toolResults []types.ContentBlock
 			for ; i < len(messages) && messages[i].Role == "tool"; i++ {
-				if messages[i].ToolCallID == "" || !validToolUseIDs[messages[i].ToolCallID] {
-					debug.D.Warn("bedrock: skipping orphaned tool result id=%s name=%s", messages[i].ToolCallID, messages[i].Name)
+				tid := messages[i].ToolCallID
+				// Only include tool results that match the preceding assistant's tool_use IDs
+				if tid == "" || !validToolUseIDs[tid] {
+					debug.D.Warn("bedrock: skipping orphaned tool result id=%s name=%s", tid, messages[i].Name)
+					continue
+				}
+				if len(precedingToolUseIDs) > 0 && !precedingToolUseIDs[tid] {
+					debug.D.Warn("bedrock: skipping tool result id=%s (not in preceding assistant's tool_use set)", tid)
 					continue
 				}
 				toolResults = append(toolResults, &types.ContentBlockMemberToolResult{
 					Value: types.ToolResultBlock{
-						ToolUseId: aws.String(messages[i].ToolCallID),
+						ToolUseId: aws.String(tid),
 						Content: []types.ToolResultContentBlock{
 							&types.ToolResultContentBlockMemberText{Value: messages[i].Content},
 						},
@@ -123,6 +143,10 @@ func (l *Local) bedrockStream(ctx context.Context, region, apiKey, model string,
 				Role:    role,
 				Content: contentBlocks,
 			})
+			continue
+		}
+		// Skip empty assistant messages (no content, no tool calls)
+		if m.Role == "assistant" && m.Content == "" {
 			continue
 		}
 		// Regular text message
@@ -217,6 +241,36 @@ func (l *Local) bedrockStream(ctx context.Context, region, apiKey, model string,
 				}
 			}
 		} else {
+			// For user messages with tool_results that aren't preceded by an
+			// assistant tool_use, strip the tool_result blocks (orphaned results)
+			if msg.Role == types.ConversationRoleUser {
+				hasToolResult := false
+				for _, block := range msg.Content {
+					if _, ok := block.(*types.ContentBlockMemberToolResult); ok {
+						hasToolResult = true
+						break
+					}
+				}
+				if hasToolResult {
+					// Check if preceded by assistant with tool_use
+					preceded := false
+					if len(validatedMsgs) > 0 {
+						last := validatedMsgs[len(validatedMsgs)-1]
+						if last.Role == types.ConversationRoleAssistant {
+							for _, block := range last.Content {
+								if _, ok := block.(*types.ContentBlockMemberToolUse); ok {
+									preceded = true
+									break
+								}
+							}
+						}
+					}
+					if !preceded {
+						debug.D.Warn("bedrock: dropping orphaned user message with tool_results at position %d", i)
+						continue
+					}
+				}
+			}
 			validatedMsgs = append(validatedMsgs, msg)
 		}
 	}
@@ -442,12 +496,6 @@ func (l *Local) bedrockConverseSync(ctx context.Context, client *bedrockruntime.
 							Arguments: string(argsBytes),
 						},
 					})
-					ch <- Event{
-						Type:     "tool_call",
-						Tool:     aws.ToString(b.Value.ToolUseId),
-						ToolName: aws.ToString(b.Value.Name),
-						ToolArgs: string(argsBytes),
-					}
 				}
 			}
 		}

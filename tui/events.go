@@ -132,6 +132,30 @@ func (m *model) readNextEvent() tea.Cmd {
 		if !ok {
 			return eventMsg(engine.Event{Type: "end"})
 		}
+		// Batch-drain: if this is a delta event, greedily consume all
+		// immediately-available deltas from the channel to reduce render cycles.
+		if ev.Type == "delta" {
+			for {
+				select {
+				case next, ok2 := <-m.eventCh:
+					if !ok2 {
+						// Channel closed — return accumulated delta, next read will get "end"
+						return eventMsg(ev)
+					}
+					if next.Type == "delta" {
+						// Merge deltas
+						ev.Delta += next.Delta
+						ev.Reasoning += next.Reasoning
+					} else {
+						// Non-delta event — return both via a batch
+						return batchEventsMsg{ev, next}
+					}
+				default:
+					// No more events ready — return what we have
+					return eventMsg(ev)
+				}
+			}
+		}
 		return eventMsg(ev)
 	}
 }
@@ -162,7 +186,6 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 			}
 			m.streamBuf += ev.Delta
 		}
-		m.tokens += len(strings.Fields(ev.Delta))
 		if m.activity == "" {
 			m.activity = "thinking"
 			return m, tea.Batch(m.readNextEvent(), m.spinner.Tick)
@@ -180,12 +203,12 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		m.msgs = append(m.msgs, chatMsg{role: "tool_call", content: ev.ToolName + "(" + args + ")"})
 		// Set activity indicator based on tool name
 		// Flush streaming text before tool call so it persists in chat
-		if m.streamBuf != "" {
+		if strings.TrimSpace(m.streamBuf) != "" {
 			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf, m.width)})
-			m.streamBuf = ""
-			m.streamRenderedCache = ""
-			m.streamRenderedBlocks = 0
 		}
+		m.streamBuf = ""
+		m.streamRenderedCache = ""
+		m.streamRenderedBlocks = 0
 		toolBase := ev.ToolName
 		if idx := strings.IndexAny(toolBase, ":*"); idx >= 0 { toolBase = toolBase[:idx] }
 		switch {
@@ -242,15 +265,18 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		m.convTitle = ev.Delta
 		return m, m.readNextEvent()
 	case "end":
-		if m.streamBuf != "" {
+		if strings.TrimSpace(m.streamBuf) != "" {
 			m.msgs = append(m.msgs, chatMsg{role: "assistant", content: filterToolMarkup(m.streamBuf, m.width)})
-			m.streamBuf = ""
-			m.streamRenderedCache = ""
-			m.streamRenderedBlocks = 0
 		}
+		m.streamBuf = ""
+		m.streamRenderedCache = ""
+		m.streamRenderedBlocks = 0
 		m.streaming = false
 		m.activity = ""
-		m.tokens += ev.TotalTokens
+		tokensThisTurn := ev.Tokens + ev.TotalTokens
+		if tokensThisTurn > 0 {
+			m.tokens = tokensThisTurn
+		}
 		m.updateViewport()
 		// Auto-compact: if tokens exceed 75% of context window, compact
 		if m.tokens > 0 && len(m.msgs) > 8 {

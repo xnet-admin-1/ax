@@ -131,6 +131,11 @@ func runChatLoop(ctx context.Context, eng *engine.Engine, backend *engine.Local,
 		return err
 	}
 
+	// For Bedrock providers, use the Local backend which has full Bedrock support
+	if engine.IsBedrockProvider(apiBase) {
+		return runChatLoopLocal(ctx, backend, msgs, f, spinner, resp, totalTokens)
+	}
+
 	// Prepend system prompt
 	sys := cliSystemPrompt()
 	if sys != "" {
@@ -234,6 +239,68 @@ func runChatLoop(ctx context.Context, eng *engine.Engine, backend *engine.Local,
 		spinner.Resume()
 	}
 	return fmt.Errorf("max tool iterations reached (%d)", maxIterations)
+}
+
+// runChatLoopLocal uses the Local backend (which supports Bedrock natively)
+func runChatLoopLocal(ctx context.Context, backend *engine.Local, msgs []engine.Message, f cliFlags, spinner *cliSpinner, resp *strings.Builder, totalTokens *int) error {
+	backend.TrustAll = f.trustAll
+
+	// Create a temporary conversation for this CLI run
+	convID, err := backend.CreateConversation("CLI")
+	if err != nil {
+		return err
+	}
+
+	// Insert the user message (last in msgs slice)
+	userMsg := msgs[len(msgs)-1].Content
+	ch, err := backend.Chat(convID, userMsg)
+	if err != nil {
+		return err
+	}
+
+	firstDelta := true
+	for ev := range ch {
+		select {
+		case <-ctx.Done():
+			backend.Cancel(convID)
+			return ctx.Err()
+		default:
+		}
+
+		switch ev.Type {
+		case "delta":
+			if firstDelta && ev.Delta != "" {
+				spinner.Pause()
+				firstDelta = false
+			}
+			resp.WriteString(ev.Delta)
+		case "tool_call":
+			if f.trust || f.trustAll {
+				stderrMu.Lock()
+				args := ev.ToolArgs
+				if len(args) > 80 {
+					args = args[:80] + "..."
+				}
+				fmt.Fprintf(os.Stderr, "\r\033[K  → %s(%s)\n", ev.ToolName, args)
+				stderrMu.Unlock()
+			}
+		case "tool_result":
+			if f.trust || f.trustAll {
+				summary := ev.ToolResult
+				if len(summary) > 200 {
+					summary = summary[:200] + "..."
+				}
+				stderrMu.Lock()
+				fmt.Fprintf(os.Stderr, "  ← %s\n", strings.ReplaceAll(summary, "\n", " "))
+				stderrMu.Unlock()
+			}
+		case "end":
+			*totalTokens = ev.Tokens
+		case "error":
+			return fmt.Errorf("%s", ev.Error)
+		}
+	}
+	return nil
 }
 
 // --- Streaming Request ---

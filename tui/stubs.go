@@ -7,6 +7,7 @@
 package tui
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -832,7 +833,39 @@ func (m *model) compactContext() tea.Cmd {
 		for _, msg := range m.msgs {
 			conv.WriteString(msg.role + ": " + msg.content + "\n")
 		}
-		// Non-streaming request for summary
+
+		// For Bedrock providers, use the Local engine's Bedrock path
+		if engine.IsBedrockProvider(apiBase) {
+			// Fall back to text-based compaction (no LLM call needed)
+			last4 := m.msgs
+			if len(last4) > 4 {
+				last4 = last4[len(last4)-4:]
+			}
+			var summary strings.Builder
+			summary.WriteString("Prior conversation context:\n")
+			for _, msg := range m.msgs[:len(m.msgs)-len(last4)] {
+				preview := msg.content
+				if len(preview) > 200 {
+					preview = preview[:200] + "..."
+				}
+				if msg.role == "tool_call" || msg.role == "tool_result" {
+					continue
+				}
+				summary.WriteString(fmt.Sprintf("[%s]: %s\n", msg.role, preview))
+			}
+			m.msgs = append([]chatMsg{{role: "system", content: "[Summary] " + summary.String()}}, last4...)
+			m.cachedRender = ""
+			m.cachedMsgCount = 0
+			m.tokens = 0
+			// Persist compacted messages to DB
+			if db != nil && m.convID != "" {
+				persistCompactedMessages(db, m.convID, m.msgs)
+			}
+			m.updateViewport()
+			return knowledgeMsg("Context compacted (text summary — Bedrock provider)")
+		}
+
+		// Non-streaming request for summary (OpenAI-compatible providers)
 		reqMsgs := []map[string]any{
 			{"role": "system", "content": "Summarize this conversation concisely, preserving key decisions and context."},
 			{"role": "user", "content": conv.String()},
@@ -868,8 +901,32 @@ func (m *model) compactContext() tea.Cmd {
 		}
 		m.msgs = append([]chatMsg{{role: "system", content: "[Summary] " + summary}}, last4...)
 		m.cachedRender = ""
+		m.cachedMsgCount = 0
+		m.tokens = 0
+		// Persist compacted messages to DB
+		if db != nil && m.convID != "" {
+			persistCompactedMessages(db, m.convID, m.msgs)
+		}
 		m.updateViewport()
 		return knowledgeMsg("Context compacted via LLM summary")
+	}
+}
+
+// persistCompactedMessages replaces all messages in the DB for a conversation
+// with the compacted set, so resuming the conversation loads the compacted state.
+func persistCompactedMessages(db *sql.DB, convID string, msgs []chatMsg) {
+	// Delete all existing messages for this conversation
+	db.Exec("DELETE FROM messages WHERE conv_id=?", convID)
+	// Insert compacted messages
+	now := time.Now().Unix()
+	for _, msg := range msgs {
+		// Skip TUI-only message types that aren't persisted
+		if msg.role == "tool_call" || msg.role == "tool_result" {
+			continue
+		}
+		db.Exec("INSERT INTO messages(conv_id,role,content,created_at) VALUES(?,?,?,?)",
+			convID, msg.role, msg.content, now)
+		now++ // increment to preserve ordering
 	}
 }
 
