@@ -123,6 +123,7 @@ func seedFromJSON(db *sql.DB, data []byte) error {
 		db.Exec("INSERT OR IGNORE INTO providers(name, api_key, api_base, enabled, models) VALUES(?,?,?,?,?)",
 			p.Name, p.APIKey, p.APIBase, enabled, string(models))
 	}
-	db.Exec("INSERT OR IGNORE INTO settings(key, value) VALUES('selected_model', 'google-ai-studio/models/gemma-4-31b-it')")
+	db.Exec("INSERT OR IGNORE INTO settings(key, value) VALUES('selected_model', 'bedrock-mantle/moonshotai.kimi-k2-thinking')")
+	db.Exec("UPDATE settings SET value='bedrock-mantle/moonshotai.kimi-k2-thinking' WHERE key='selected_model' AND value=''")
 	return nil
 }

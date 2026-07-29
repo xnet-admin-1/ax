@@ -277,6 +277,15 @@ func filterToolMarkup(s string, width int) string {
 	result = regexp.MustCompile(`(?s)<minimax:tool_call>.*?</minimax:tool_call>`).ReplaceAllString(result, "")
 	// Strip [TOOL_CALLS]... (Mistral format)
 	result = regexp.MustCompile(`(?s)\[TOOL_CALLS\].*$`).ReplaceAllString(result, "")
+	// Strip functions.name:N {json} (Kimi K2/Moonshot format)
+	result = regexp.MustCompile(`(?m)functions\.\w+:\d+\s*\{[^\n]*\}`).ReplaceAllString(result, "")
+	result = regexp.MustCompile(`(?m)functions\.\w+:\d+\s*\n\s*\{[^\n]*\}`).ReplaceAllString(result, "")
+	// Strip Kimi K2 tool call section markers from reasoning
+	result = regexp.MustCompile(`(?s)<\|tool_calls_section_begin\|>.*?<\|tool_calls_section_end\|>`).ReplaceAllString(result, "")
+	result = regexp.MustCompile(`(?s)<\|tool_calls_section_begin\|>.*$`).ReplaceAllString(result, "")
+	result = regexp.MustCompile(`<\|tool_call_begin\|>`).ReplaceAllString(result, "")
+	result = regexp.MustCompile(`<\|tool_call_end\|>`).ReplaceAllString(result, "")
+	result = regexp.MustCompile(`<\|tool_call_argument_begin\|>`).ReplaceAllString(result, "")
 	// Strip standalone JSON tool calls {"name":"x","arguments":{...}}
 	result = regexp.MustCompile(`(?s)\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"(?:arguments|parameters)"\s*:\s*\{.*?\}\s*\}`).ReplaceAllString(result, "")
 	for _, marker := range []string{"<|tool_call", "<|im_end", "<|assistant", "<|function_call"} {

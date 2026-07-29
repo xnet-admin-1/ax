@@ -144,7 +144,16 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 				m.inReasoning = true
 				m.streamBuf += "<thought>"
 			}
-			m.streamBuf += ev.Reasoning
+			// Strip Kimi K2 tool call markers from reasoning display
+			r := ev.Reasoning
+			for _, marker := range []string{"<|tool_calls_section_begin|>", "<|tool_calls_section_end|>", "<|tool_call_begin|>", "<|tool_call_end|>", "<|tool_call_argument_begin|>"} {
+				r = strings.ReplaceAll(r, marker, "")
+			}
+			// Strip the actual tool call line from reasoning display
+			if idx := strings.Index(r, "functions."); idx >= 0 {
+				r = r[:idx]
+			}
+			m.streamBuf += r
 		}
 		if ev.Delta != "" {
 			if m.inReasoning {

@@ -15,11 +15,23 @@ import (
 )
 
 func init() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
+	// Use portable data dir (.ax next to binary) if it exists
+	dir := ""
+	if exe, err := os.Executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			portableDir := filepath.Join(filepath.Dir(resolved), ".ax")
+			if info, err := os.Stat(portableDir); err == nil && info.IsDir() {
+				dir = portableDir
+			}
+		}
 	}
-	dir := filepath.Join(home, ".ax")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		dir = filepath.Join(home, ".ax")
+	}
 	os.MkdirAll(dir, 0700)
 	if f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600); err == nil {
 		log.SetOutput(f)

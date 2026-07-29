@@ -22,7 +22,9 @@ import (
 // IsBedrockProvider returns true if the apiBase indicates a Bedrock provider.
 func IsBedrockProvider(apiBase string) bool {
 	lower := strings.ToLower(apiBase)
-	if strings.Contains(lower, "bedrock") {
+	// Only route to Bedrock SDK for bedrock-runtime endpoints, NOT bedrock-mantle
+	// bedrock-mantle is OpenAI Chat Completions compatible
+	if strings.Contains(lower, "bedrock-runtime") {
 		return true
 	}
 	if matched := bedrockRegionRe.MatchString(lower); matched {

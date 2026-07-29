@@ -1,1 +1,66 @@
-{"providers":[]}
+{
+  "providers": [
+    {
+      "name": "bedrock-mantle",
+      "apiKey": "ABSKTWFudGxlQXBpS2V5LXE3NGNqbXNqLWF0LTk3MDIyMDAwNTI2MzpWVkcwSS8yektMM3hTeThUeXdDZnVtUHhiUDBDQUhEVFdzbU8zSTdpWkhJRlpyQUpySmFaVk5zM0gxUT0=",
+      "apiBase": "https://bedrock-mantle.us-west-2.api.aws/v1",
+      "enabled": true,
+      "cachedModels": [
+        "moonshotai.kimi-k2-thinking",
+        "moonshotai.kimi-k2.5",
+        "anthropic.claude-haiku-4-5",
+        "openai.gpt-5.4",
+        "openai.gpt-5.4-2026-03-05",
+        "openai.gpt-5.6-luna",
+        "openai.gpt-5.6-terra",
+        "openai.gpt-oss-120b",
+        "openai.gpt-oss-20b",
+        "openai.gpt-oss-safeguard-120b",
+        "openai.gpt-oss-safeguard-20b",
+        "deepseek.v3.1",
+        "deepseek.v3.2",
+        "google.gemma-3-12b-it",
+        "google.gemma-3-27b-it",
+        "google.gemma-3-4b-it",
+        "google.gemma-4-26b-a4b",
+        "google.gemma-4-31b",
+        "google.gemma-4-e2b",
+        "mistral.mistral-large-3-675b-instruct",
+        "mistral.devstral-2-123b",
+        "mistral.magistral-small-2509",
+        "mistral.ministral-3-14b-instruct",
+        "mistral.ministral-3-8b-instruct",
+        "mistral.ministral-3-3b-instruct",
+        "mistral.voxtral-mini-3b-2507",
+        "mistral.voxtral-small-24b-2507",
+        "qwen.qwen3-235b-a22b-2507",
+        "qwen.qwen3-32b",
+        "qwen.qwen3-coder-30b-a3b-instruct",
+        "qwen.qwen3-coder-480b-a35b-instruct",
+        "qwen.qwen3-coder-next",
+        "qwen.qwen3-next-80b-a3b-instruct",
+        "qwen.qwen3-vl-235b-a22b-instruct",
+        "nvidia.nemotron-nano-12b-v2",
+        "nvidia.nemotron-nano-3-30b",
+        "nvidia.nemotron-nano-9b-v2",
+        "nvidia.nemotron-super-3-120b",
+        "minimax.minimax-m2",
+        "minimax.minimax-m2.1",
+        "minimax.minimax-m2.5",
+        "xai.grok-4.3",
+        "zai.glm-4.6",
+        "zai.glm-4.7",
+        "zai.glm-4.7-flash",
+        "zai.glm-5",
+        "writer.palmyra-vision-7b"
+      ]
+    },
+    {
+      "name": "aiope-gateway",
+      "apiKey": "gw-eb11cdb3a26320fd60288a434565e119",
+      "apiBase": "https://inf.xnet.ngo/v1",
+      "enabled": true,
+      "cachedModels": []
+    }
+  ]
+}

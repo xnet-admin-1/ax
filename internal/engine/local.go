@@ -1038,13 +1038,17 @@ func extractPreToolContent(content string) string {
 func detectTextToolCalls(content string) []textToolCall {
 	var found []textToolCall
 
-	// Strip <think>/<thought>/<reasoning> blocks — reasoning shouldn't trigger tool detection
+	// Strip <think>/<thought>/<reasoning> blocks — but keep the content for Format 7 check
 	stripped := regexp.MustCompile(`(?s)<think>.*?</think>`).ReplaceAllString(content, "")
 	stripped = regexp.MustCompile(`(?s)<thought>.*?</thought>`).ReplaceAllString(stripped, "")
 	stripped = regexp.MustCompile(`(?s)<reasoning>.*?</reasoning>`).ReplaceAllString(stripped, "")
 	stripped = regexp.MustCompile(`(?s)<think>.*$`).ReplaceAllString(stripped, "")
 	stripped = regexp.MustCompile(`(?s)<thought>.*$`).ReplaceAllString(stripped, "")
 	stripped = regexp.MustCompile(`(?s)<reasoning>.*$`).ReplaceAllString(stripped, "")
+
+	// Also check the raw content (including reasoning) for Kimi K2 format
+	// since Kimi outputs tool calls inside its reasoning stream
+	searchTargets := []string{stripped, content}
 
 	// Format 1: [TOOL_CALLS]toolname{json} (Mistral)
 	if idx := strings.Index(stripped, "[TOOL_CALLS]"); idx >= 0 {
@@ -1163,6 +1167,42 @@ func detectTextToolCalls(content string) []textToolCall {
 					}
 					found = append(found, textToolCall{name: tc.Name, args: args, argsRaw: line})
 				}
+			}
+		}
+	}
+
+	// Format 7: functions.name:N  {json} (Kimi K2/Moonshot format)
+	// JSON can be on same line or next line, with any whitespace between
+	if len(found) == 0 {
+		funcLineRe := regexp.MustCompile(`functions\.(\w+):\d+\s*(\{[^}]+\})`)
+		for _, target := range searchTargets {
+			for _, match := range funcLineRe.FindAllStringSubmatch(target, -1) {
+				name := match[1]
+				argsStr := match[2]
+				var args map[string]any
+				if json.Unmarshal([]byte(argsStr), &args) == nil {
+					found = append(found, textToolCall{name: name, args: args, argsRaw: argsStr})
+				}
+			}
+			if len(found) > 0 {
+				break
+			}
+		}
+	}
+	// Format 7b: functions.name:N\n{json} (JSON on separate line)
+	if len(found) == 0 {
+		funcSplitRe := regexp.MustCompile(`(?m)functions\.(\w+):\d+\s*\n\s*(\{[^\n]+\})`)
+		for _, target := range searchTargets {
+			for _, match := range funcSplitRe.FindAllStringSubmatch(target, -1) {
+				name := match[1]
+				argsStr := match[2]
+				var args map[string]any
+				if json.Unmarshal([]byte(argsStr), &args) == nil {
+					found = append(found, textToolCall{name: name, args: args, argsRaw: argsStr})
+				}
+			}
+			if len(found) > 0 {
+				break
 			}
 		}
 	}
