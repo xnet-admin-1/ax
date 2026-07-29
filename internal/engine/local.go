@@ -244,11 +244,21 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 	if sys != "" {
 		messages = append([]Message{{Role: "system", Content: sys}}, messages...)
 	}
+	var totalTokens int
 	for {
 		// Compact messages if approaching context limit (keeps tools working at high token counts)
 		messages = l.compactIfNeeded(ctx, apiBase, apiKey, model, messages)
 
-		content, toolCalls, tokens, finishReason, err := l.stream(ctx, apiBase, apiKey, model, messages, ch)
+		var content string
+		var toolCalls []ToolCall
+		var tokens int
+		var finishReason string
+		var err error
+
+		content, toolCalls, tokens, finishReason, err = l.stream(ctx, apiBase, apiKey, model, messages, ch)
+		if tokens > 0 {
+			totalTokens = tokens
+		}
 		if err != nil {
 			ch <- Event{Type: "error", Error: err.Error()}
 			return
@@ -325,7 +335,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			if content != "" {
 				l.maybeAutoTitle(convID, apiBase, apiKey, model, ch)
 			}
-			ch <- Event{Type: "end", Tokens: tokens}
+			ch <- Event{Type: "end", Tokens: totalTokens}
 			return
 		}
 		messages = append(messages, Message{Role: "assistant", Content: content, ToolCalls: toolCalls})

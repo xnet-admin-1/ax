@@ -236,6 +236,7 @@ func runChatLoop(ctx context.Context, eng *engine.Engine, backend *engine.Local,
 	return fmt.Errorf("max tool iterations reached (%d)", maxIterations)
 }
 
+// runChatLoopLocal uses the Local backend (which supports Bedrock natively)
 // --- Streaming Request ---
 
 func streamRequest(ctx context.Context, apiBase, apiKey, model string, messages []engine.Message, spinner *cliSpinner, content *strings.Builder, toolCalls *[]engine.ToolCall, tokens *int) error {

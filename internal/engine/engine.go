@@ -473,6 +473,15 @@ func toolRunSh(command string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	// Prevent terminal stdin inheritance — blocks interactive commands from
+	// corrupting the display or spinning on reads.
+	devnull, err := os.Open(os.DevNull)
+	if err == nil {
+		cmd.Stdin = devnull
+		defer devnull.Close()
+	}
+	// Process group isolation (Unix only).
+	llm.IsolateCmd(cmd)
 	out, err := cmd.CombinedOutput()
 	result := string(out)
 	if err != nil {

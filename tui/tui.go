@@ -31,12 +31,13 @@ import (
 
 // Messages
 type (
-	eventMsg     engine.Event
-	modelsMsg    []string
-	sessionsMsg  []engine.Conversation
-	convLoadMsg  []engine.Message
-	newConvMsg   string
-	editorMsg    string
+	eventMsg       engine.Event
+	batchEventsMsg []engine.Event
+	modelsMsg      []string
+	sessionsMsg    []engine.Conversation
+	convLoadMsg    []engine.Message
+	newConvMsg     string
+	editorMsg      string
 	errMsg         error
 	renderTickMsg  time.Time
 	launchAgentMsg string
@@ -292,6 +293,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventMsg:
 		m.viewDirty = true
 		return m.handleEvent(engine.Event(msg))
+
+	case batchEventsMsg:
+		m.viewDirty = true
+		// Process the first event (merged delta), then schedule the second
+		// (non-delta) as a separate message to avoid viewport state issues.
+		if len(msg) > 0 {
+			_, _ = m.handleEvent(msg[0])
+		}
+		if len(msg) > 1 {
+			remaining := msg[1]
+			return m, func() tea.Msg { return eventMsg(remaining) }
+		}
+		return m, m.readNextEvent()
 
 	case spinner.TickMsg:
 		m.spinTick++
