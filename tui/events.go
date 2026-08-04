@@ -241,13 +241,13 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 			content = fmt.Sprintf("[%s] %s", elapsed.Round(time.Millisecond), content)
 		}
 		m.msgs = append(m.msgs, chatMsg{role: "tool_result", content: content})
-		m.activity = ""
+		m.activity = "thinking"
 		// Check for handoff tool result
 		if ev.ToolName == "handoff" && strings.Contains(ev.ToolResult, `"handoff": true`) {
 			m.handleHandoffFromTool(ev.ToolResult)
 		}
 		m.updateViewport()
-		return m, m.readNextEvent()
+		return m, tea.Batch(m.readNextEvent(), m.spinner.Tick)
 	case "progress":
 		return m, m.readNextEvent()
 	case "confirm":
@@ -257,6 +257,10 @@ func (m *model) handleEvent(ev engine.Event) (tea.Model, tea.Cmd) {
 		m.addSystemMsg(fmt.Sprintf("[!] Dangerous: %s (%s) — y/n?", ev.ToolName, ev.ToolResult))
 		m.updateViewport()
 		return m, nil // stop reading events until user responds
+	case "continue":
+		// Response was truncated (max_tokens), model will continue — keep spinner alive
+		m.activity = "thinking"
+		return m, tea.Batch(m.readNextEvent(), m.spinner.Tick)
 	case "error":
 		m.streaming = false
 		m.addSystemMsg("" + ev.Error)

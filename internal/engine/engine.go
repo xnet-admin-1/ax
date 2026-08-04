@@ -322,10 +322,11 @@ func (e *Engine) Chat(ctx context.Context, messages []Message, onEvent func(Even
 
 func (e *Engine) streamRequest(ctx context.Context, apiBase, apiKey, model string, messages []Message, onEvent func(Event)) (string, []ToolCall, int, error) {
 	body := map[string]any{
-		"model":    model,
-		"messages": messages,
-		"tools":    toolDefs,
-		"stream":   true,
+		"model":          model,
+		"messages":       messages,
+		"tools":          toolDefs,
+		"stream":         true,
+		"stream_options": map[string]any{"include_usage": true},
 	}
 	jsonBody, _ := json.Marshal(body)
 

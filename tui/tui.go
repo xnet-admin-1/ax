@@ -826,10 +826,11 @@ func (m *model) updateViewport() {
 		sb.WriteString(streamingBorder(m.spinTick).Width(bubbleW).Padding(0, 1).Render(rendered) + "\n")
 		content += sb.String()
 	}
+	wasAtBottom := m.vp.AtBottom()
 	m.vp.SetContent(content)
-	if m.vp.AtBottom() || m.streaming {
+	// Auto-scroll: always during streaming, or if user was at bottom before content update
+	if m.streaming || wasAtBottom {
 		m.vp.GotoBottom()
-		dbg.Verbose("updateViewport: GotoBottom (atBottom=%v streaming=%v)", m.vp.AtBottom(), m.streaming)
 	}
 }
 

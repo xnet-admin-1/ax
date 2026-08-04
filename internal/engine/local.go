@@ -292,6 +292,7 @@ func (l *Local) chatLoop(ctx context.Context, ch chan Event, convID, apiBase, ap
 			if finishReason == "length" && content != "" {
 				messages = append(messages, Message{Role: "assistant", Content: content})
 				messages = append(messages, Message{Role: "user", Content: "Continue from where you left off. Keep using tools as needed."})
+				ch <- Event{Type: "continue"}
 				continue
 			}
 			// Detect text-mode tool calls (model outputs JSON instead of using function calling)
@@ -625,7 +626,7 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 			})
 		}
 	}
-	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true, "tool_choice": "auto", "max_tokens": 16384}
+	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true, "stream_options": map[string]any{"include_usage": true}, "tool_choice": "auto", "max_tokens": 16384}
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
 	if err != nil {
