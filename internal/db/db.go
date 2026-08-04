@@ -18,42 +18,35 @@ import (
 var DataDir string
 
 func DefaultPath() string {
-	dir := resolveDataDir()
+	dir := ResolveDataDir()
 	os.MkdirAll(dir, 0755)
 	return filepath.Join(dir, "ax.db")
 }
 
-// resolveDataDir determines the data directory in priority order:
+// ResolveDataDir determines the data directory in priority order:
 // 1. Explicit DataDir (set via --data-dir flag)
-// 2. Portable: .ax/ directory next to the binary
-// 3. Portable: ax.db file next to the binary
-// 4. Default: ~/.ax/
-func resolveDataDir() string {
+// 2. Portable: .ax/ directory next to the binary (created automatically)
+// 3. Fallback: ~/.ax/ (only if binary location is not writable)
+func ResolveDataDir() string {
 	// 1. Explicit override
 	if DataDir != "" {
 		return DataDir
 	}
 
-	// 2-3. Check next to binary (portable mode)
+	// 2. Portable mode: always use .ax/ next to binary
 	exe, err := os.Executable()
 	if err == nil {
 		exe, _ = filepath.EvalSymlinks(exe)
 		exeDir := filepath.Dir(exe)
-
-		// Check for .ax/ directory next to binary
 		portableDir := filepath.Join(exeDir, ".ax")
-		if info, err := os.Stat(portableDir); err == nil && info.IsDir() {
-			return portableDir
-		}
 
-		// Check for ax.db next to binary
-		portableDB := filepath.Join(exeDir, "ax.db")
-		if _, err := os.Stat(portableDB); err == nil {
-			return exeDir
+		// Create it if it doesn't exist
+		if err := os.MkdirAll(portableDir, 0700); err == nil {
+			return portableDir
 		}
 	}
 
-	// 4. Default: ~/.ax/
+	// 3. Fallback: ~/.ax/
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".ax")
 }
@@ -68,7 +61,7 @@ func Open(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	// Seed providers: file override → embedded → example defaults
-	configPath := filepath.Join(resolveDataDir(), "gateway-config.json")
+	configPath := filepath.Join(ResolveDataDir(), "gateway-config.json")
 	if err := SeedProviders(db, configPath); err != nil {
 		if err := SeedFromEmbedded(db); err != nil {
 			SeedExampleProviders(db)

@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type ToolDef struct {
@@ -225,8 +226,11 @@ func (m *Manager) Connect(id string) error {
 		return fmt.Errorf("server %s not found", id)
 	}
 	cmd := exec.Command(cfg.Command, cfg.Args...)
-	for k, v := range cfg.Env {
-		cmd.Env = append(cmd.Env, k+"="+v)
+	if len(cfg.Env) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range cfg.Env {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
 	}
 	stdin, _ := cmd.StdinPipe()
 	stdoutPipe, _ := cmd.StdoutPipe()
@@ -328,34 +332,47 @@ func (s *Server) call(method string, params any) (json.RawMessage, error) {
 		return nil, err
 	}
 	// Read lines until we get a response with our id (skip notifications/logs)
-	for i := 0; i < 50; i++ {
-		line, err := s.stdout.ReadBytes('\n')
-		if err != nil {
-			return nil, err
-		}
-		var msg struct {
-			ID     *int            `json:"id"`
-			Result json.RawMessage `json:"result"`
-			Error  *struct {
-				Code    int    `json:"code"`
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(line, &msg) != nil {
-			continue // not valid JSON, skip
-		}
-		if msg.ID == nil {
-			continue // notification (no id), skip
-		}
-		if *msg.ID != id {
-			continue // response to different request, skip
-		}
-		if msg.Error != nil {
-			return nil, fmt.Errorf("rpc error %d: %s", msg.Error.Code, msg.Error.Message)
-		}
-		return msg.Result, nil
+	type readResult struct {
+		line []byte
+		err  error
 	}
-	return nil, fmt.Errorf("no response received for %s (id=%d)", method, id)
+	for i := 0; i < 200; i++ {
+		ch := make(chan readResult, 1)
+		go func() {
+			line, err := s.stdout.ReadBytes('\n')
+			ch <- readResult{line, err}
+		}()
+		select {
+		case res := <-ch:
+			if res.err != nil {
+				return nil, res.err
+			}
+			var msg struct {
+				ID     *int            `json:"id"`
+				Result json.RawMessage `json:"result"`
+				Error  *struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(res.line, &msg) != nil {
+				continue // not valid JSON, skip
+			}
+			if msg.ID == nil {
+				continue // notification (no id), skip
+			}
+			if *msg.ID != id {
+				continue // response to different request, skip
+			}
+			if msg.Error != nil {
+				return nil, fmt.Errorf("rpc error %d: %s", msg.Error.Code, msg.Error.Message)
+			}
+			return msg.Result, nil
+		case <-time.After(60 * time.Second):
+			return nil, fmt.Errorf("timeout waiting for response to %s (id=%d)", method, id)
+		}
+	}
+	return nil, fmt.Errorf("no response received for %s (id=%d) after 200 lines", method, id)
 }
 
 func (s *Server) stop() {

@@ -589,7 +589,7 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 			})
 		}
 	}
-	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true, "tool_choice": "auto", "max_tokens": 16384}
+	body := map[string]any{"model": model, "messages": bodyMsgs, "tools": allTools, "stream": true, "stream_options": map[string]any{"include_usage": true}, "tool_choice": "auto", "max_tokens": 16384}
 	jsonBody, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
 	if err != nil {
