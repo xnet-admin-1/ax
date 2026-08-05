@@ -413,17 +413,17 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.sessList, _ = m.sessList.Update(msg)
 			return m, nil
 		}
-		if m.panel == panelSettings { m.settingsList, _ = m.settingsList.Update(msg); return m, nil }
-		if m.panel == panelConfig { m.configList, _ = m.configList.Update(msg); return m, nil }
-		if m.panel == panelTools { m.toolsList2, _ = m.toolsList2.Update(msg); return m, nil }
+		if m.panel == panelSettings { m.settingsList, _ = m.settingsList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelConfig { m.configList, _ = m.configList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelTools { m.toolsList2, _ = m.toolsList2.Update(msg); m.viewDirty = true; return m, nil }
 		if m.panel == panelCompact { if m.compactIdx > 0 { m.compactIdx-- }; return m, nil }
 		if m.panel == panelTree { if m.treeIdx > 0 { m.treeIdx-- }; return m, nil }
-		if m.panel == panelProvider { m.providerList, _ = m.providerList.Update(msg); return m, nil }
-		if m.panel == panelMemory { m.memoryList, _ = m.memoryList.Update(msg); return m, nil }
-		if m.panel == panelRemote { m.remoteList, _ = m.remoteList.Update(msg); return m, nil }
+		if m.panel == panelProvider { m.providerList, _ = m.providerList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelMemory { m.memoryList, _ = m.memoryList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelRemote { m.remoteList, _ = m.remoteList.Update(msg); m.viewDirty = true; return m, nil }
 		if m.panel == panelAgents { if h, c := m.handleAgentsKeyStr("up"); h { return m, c } }
-		if m.panel == panelSpawn { m.spawnList, _ = m.spawnList.Update(msg); return m, nil }
-		if m.panel == panelAgentBuilder { m.agentBuilderList, _ = m.agentBuilderList.Update(msg); return m, nil }
+		if m.panel == panelSpawn { m.spawnList, _ = m.spawnList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelAgentBuilder { m.agentBuilderList, _ = m.agentBuilderList.Update(msg); m.viewDirty = true; return m, nil }
 		if m.panel != panelNone { m.panelVp.LineUp(1); return m, nil }
 	case "h":
 		if m.panel == panelRemote {
@@ -501,17 +501,17 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.sessList, _ = m.sessList.Update(msg)
 			return m, nil
 		}
-		if m.panel == panelSettings { m.settingsList, _ = m.settingsList.Update(msg); return m, nil }
-		if m.panel == panelConfig { m.configList, _ = m.configList.Update(msg); return m, nil }
-		if m.panel == panelTools { m.toolsList2, _ = m.toolsList2.Update(msg); return m, nil }
+		if m.panel == panelSettings { m.settingsList, _ = m.settingsList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelConfig { m.configList, _ = m.configList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelTools { m.toolsList2, _ = m.toolsList2.Update(msg); m.viewDirty = true; return m, nil }
 		if m.panel == panelCompact { if m.compactIdx < 2 { m.compactIdx++ }; return m, nil }
 		if m.panel == panelTree { if m.treeIdx < len(m.treeItems)-1 { m.treeIdx++ }; return m, nil }
-		if m.panel == panelProvider { m.providerList, _ = m.providerList.Update(msg); return m, nil }
-		if m.panel == panelMemory { m.memoryList, _ = m.memoryList.Update(msg); return m, nil }
-		if m.panel == panelRemote { m.remoteList, _ = m.remoteList.Update(msg); return m, nil }
+		if m.panel == panelProvider { m.providerList, _ = m.providerList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelMemory { m.memoryList, _ = m.memoryList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelRemote { m.remoteList, _ = m.remoteList.Update(msg); m.viewDirty = true; return m, nil }
 		if m.panel == panelAgents { if h, c := m.handleAgentsKeyStr("down"); h { return m, c } }
-		if m.panel == panelSpawn { m.spawnList, _ = m.spawnList.Update(msg); return m, nil }
-		if m.panel == panelAgentBuilder { m.agentBuilderList, _ = m.agentBuilderList.Update(msg); return m, nil }
+		if m.panel == panelSpawn { m.spawnList, _ = m.spawnList.Update(msg); m.viewDirty = true; return m, nil }
+		if m.panel == panelAgentBuilder { m.agentBuilderList, _ = m.agentBuilderList.Update(msg); m.viewDirty = true; return m, nil }
 		if m.panel != panelNone { m.panelVp.LineDown(1); return m, nil }
 	}
 
