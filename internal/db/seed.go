@@ -9,6 +9,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
@@ -113,6 +114,9 @@ func seedFromJSON(db *sql.DB, data []byte) error {
 	}
 	if err := json.Unmarshal(data, &config); err != nil {
 		return err
+	}
+	if len(config.Providers) == 0 {
+		return fmt.Errorf("no providers in embedded config")
 	}
 	for _, p := range config.Providers {
 		models, _ := json.Marshal(p.CachedModels)
