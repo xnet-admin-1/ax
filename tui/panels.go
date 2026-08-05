@@ -287,7 +287,7 @@ func (m *model) handleEditKey(key string) (bool, tea.Cmd) {
 		}
 		return true, nil
 	default:
-		if len(key) == 1 {
+		if len(key) >= 1 && !strings.HasPrefix(key, "ctrl+") && !strings.HasPrefix(key, "alt+") {
 			m.editingValue = m.editingValue[:m.editingCursor] + key + m.editingValue[m.editingCursor:]
 			m.editingCursor++
 			return true, nil
@@ -353,7 +353,7 @@ func (m *model) handleMCPKey(key string) (bool, tea.Cmd) {
 			}
 			return true, nil
 		default:
-			if len(key) == 1 {
+			if len(key) >= 1 && !strings.HasPrefix(key, "ctrl+") && !strings.HasPrefix(key, "alt+") {
 				m.mcpInput += key
 			}
 			return true, nil
@@ -380,7 +380,7 @@ func (m *model) handleMCPKey(key string) (bool, tea.Cmd) {
 			}
 			return true, nil
 		default:
-			if len(key) == 1 {
+			if len(key) >= 1 && !strings.HasPrefix(key, "ctrl+") && !strings.HasPrefix(key, "alt+") {
 				m.mcpInput += key
 			}
 			return true, nil
@@ -656,7 +656,7 @@ func (m *model) handleMemoryEditKey(key string) (bool, tea.Cmd) {
 		}
 		return true, nil
 	default:
-		if len(key) == 1 {
+		if len(key) >= 1 && !strings.HasPrefix(key, "ctrl+") && !strings.HasPrefix(key, "alt+") {
 			if m.memEditStep == 1 {
 				m.memEditKey += key
 			} else {
@@ -869,7 +869,7 @@ func (m *model) handleProviderAddKey(key string) (bool, tea.Cmd) {
 		if len(m.provInput) > 0 { m.provInput = m.provInput[:len(m.provInput)-1] }
 		return true, nil
 	default:
-		if len(key) == 1 {
+		if len(key) >= 1 && !strings.HasPrefix(key, "ctrl+") && !strings.HasPrefix(key, "alt+") {
 			m.provInput += key
 			return true, nil
 		}

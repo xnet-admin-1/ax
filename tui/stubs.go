@@ -514,7 +514,7 @@ func (m *model) handleAgentBuildKey(key string) (bool, tea.Cmd) {
 		}
 		return true, nil
 	default:
-		if len(key) == 1 {
+		if len(key) >= 1 && !strings.HasPrefix(key, "ctrl+") && !strings.HasPrefix(key, "alt+") {
 			m.agentBuildInput += key
 			return true, nil
 		}

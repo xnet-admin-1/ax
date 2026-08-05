@@ -417,20 +417,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case settingsLoadedMsg:
 		items := []list.Item(msg)
-		m.settingsList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.settingsList = list.New(items, sd, m.width-4, m.height-8)
 		m.settingsList.SetShowHelp(false)
 		m.settingsList.Title = "Settings (enter to edit, esc to close)"
 		return m, nil
 	case mcpLoadedMsg:
 		items := []list.Item(msg)
 		if items == nil { items = []list.Item{} }
-		m.mcpList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.mcpList = list.New(items, sd, m.width-4, m.height-8)
 		m.mcpList.SetShowHelp(false)
 		m.mcpList.Title = "🔌 MCP Servers (enter for info, esc to close)"
 		return m, nil
 	case configLoadedMsg:
 		items := []list.Item(msg)
-		m.configList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.configList = list.New(items, sd, m.width-4, m.height-8)
 		m.configList.SetShowHelp(false)
 		m.configList.Title = ""
 		m.configList.SetShowTitle(false)
@@ -438,7 +438,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case toolsLoadedMsg:
 		items := []list.Item(msg)
-		m.toolsList2 = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.toolsList2 = list.New(items, sd, m.width-4, m.height-8)
 		m.toolsList2.SetShowHelp(false)
 		m.toolsList2.Title = ""
 		m.toolsList2.SetShowTitle(false)
@@ -446,47 +446,50 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case memoriesLoadedMsg:
 		items := []list.Item(msg)
 		if items == nil { items = []list.Item{} }
-		m.memoryList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.memoryList = list.New(items, sd, m.width-4, m.height-8)
 		m.memoryList.SetShowHelp(false)
 		m.memoryList.SetShowTitle(false)
 		return m, nil
 	case remoteLoadedMsg:
 		items := []list.Item(msg)
 		if items == nil { items = []list.Item{} }
-		m.remoteList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.remoteList = list.New(items, sd, m.width-4, m.height-8)
 		m.remoteList.SetShowHelp(false)
 		m.remoteList.SetShowTitle(false)
 		return m, nil
 	case gwProvidersLoadedMsg:
 		items := []list.Item(msg)
 		if items == nil { items = []list.Item{} }
-		m.providerList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		pd := list.NewDefaultDelegate()
+		pd.SetSpacing(0)
+		pd.SetHeight(1)
+		m.providerList = list.New(items, pd, m.width-4, m.height-8)
 		m.providerList.SetShowHelp(false)
 		m.providerList.SetShowTitle(false)
 		m.providerList.SetFilteringEnabled(false)
 		return m, nil
 	case spawnLoadedMsg:
 		items := []list.Item(msg)
-		m.spawnList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.spawnList = list.New(items, sd, m.width-4, m.height-8)
 		m.spawnList.SetShowHelp(false)
 		m.spawnList.SetShowTitle(false)
 		return m, nil
 	case agentListLoadedMsg:
 		items := []list.Item(msg)
-		m.agentBuilderList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.agentBuilderList = list.New(items, sd, m.width-4, m.height-8)
 		m.agentBuilderList.SetShowHelp(false)
 		m.agentBuilderList.SetShowTitle(false)
 		return m, nil
 	case agentBuilderLoadedMsg:
 		items := []list.Item(msg)
-		m.agentBuilderList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.agentBuilderList = list.New(items, sd, m.width-4, m.height-8)
 		m.agentBuilderList.SetShowHelp(false)
 		m.agentBuilderList.SetShowTitle(false)
 		return m, nil
 	case agentsLoadedMsg:
 		items := []list.Item(msg)
 		if items == nil { items = []list.Item{} }
-		m.agentsList = list.New(items, list.NewDefaultDelegate(), m.width-4, m.height-8)
+		sd := list.NewDefaultDelegate(); sd.SetSpacing(0); sd.SetHeight(1); m.agentsList = list.New(items, sd, m.width-4, m.height-8)
 		m.agentsList.SetShowHelp(false)
 		m.agentsList.SetShowTitle(false)
 		return m, nil
