@@ -154,15 +154,25 @@ func IsDangerous(command string) (bool, string) {
 			return true, "recursive delete outside /tmp"
 		}
 	}
-	for _, p := range []string{"dd ", "mkfs", "fdisk"} {
-		if strings.Contains(lower, p) {
+	// dd, mkfs, fdisk — only match as standalone commands (start of line or after pipe/semicolon/&&)
+	for _, p := range []string{"dd", "fdisk"} {
+		if matched, _ := regexp.MatchString(`(?:^|[;|&]\s*)`+p+`\s`, lower); matched {
 			return true, "destructive disk operation: " + p
 		}
 	}
-	if strings.Contains(command, "chmod 777") || strings.Contains(lower, "chown ") {
+	if matched, _ := regexp.MatchString(`(?:^|[;|&]\s*)mkfs`, lower); matched {
+		return true, "destructive disk operation: mkfs"
+	}
+	if strings.Contains(command, "chmod 777") {
 		return true, "dangerous permission change"
 	}
-	if strings.Contains(command, "kill -9") || strings.Contains(lower, "killall ") {
+	if matched, _ := regexp.MatchString(`(?:^|[;|&]\s*)chown\s`, lower); matched {
+		return true, "dangerous permission change"
+	}
+	if strings.Contains(command, "kill -9") {
+		return true, "force kill process"
+	}
+	if matched, _ := regexp.MatchString(`(?:^|[;|&]\s*)killall\s`, lower); matched {
 		return true, "force kill process"
 	}
 	if strings.Contains(command, "git push --force") || strings.Contains(command, "git reset --hard") {

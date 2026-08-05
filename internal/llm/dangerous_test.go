@@ -29,6 +29,12 @@ func TestIsDangerous(t *testing.T) {
 		{"echo hello > /etc/hosts", true},
 		{"echo hello > /tmp/test", false},
 		{"killall nginx", true},
+		// False positive fixes:
+		{"git add .", false},
+		{"npm add express", false},
+		{"apt-get install nodejs", false},
+		{"ufw add rule", false},
+		{"docker add file", false},
 	}
 	for _, tt := range tests {
 		got, reason := llm.IsDangerous(tt.cmd)
