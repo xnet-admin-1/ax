@@ -197,6 +197,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.streaming {
 			m.backend.Cancel(m.convID)
 			m.streaming = false
+			m.activity = ""
 			return m, nil
 		}
 		if m.ctrlCPressed {

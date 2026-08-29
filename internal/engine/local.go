@@ -643,7 +643,45 @@ func (l *Local) stream(ctx context.Context, apiBase, apiKey, model string, messa
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return "", nil, 0, "", fmt.Errorf("API error %d: %s", resp.StatusCode, b)
+		errStr := string(b)
+		// If model doesn't support images, retry without them
+		if resp.StatusCode == 400 && strings.Contains(errStr, "image") && strings.Contains(errStr, "modality") {
+			resp.Body.Close()
+			// Rebuild messages without image encoding
+			bodyMsgs = nil
+			for _, m := range messages {
+				msg := map[string]any{"role": m.Role, "content": m.Content}
+				if len(m.ToolCalls) > 0 {
+					msg["tool_calls"] = m.ToolCalls
+				}
+				if m.ToolCallID != "" && m.Role == "tool" {
+					msg["tool_call_id"] = m.ToolCallID
+					msg["name"] = m.Name
+				}
+				bodyMsgs = append(bodyMsgs, msg)
+			}
+			body["messages"] = bodyMsgs
+			jsonBody, _ = json.Marshal(body)
+			req, err = http.NewRequestWithContext(ctx, "POST", apiBase+"/chat/completions", strings.NewReader(string(jsonBody)))
+			if err != nil {
+				return "", nil, 0, "", err
+			}
+			req.Header.Set("Content-Type", "application/json")
+			if apiKey != "" {
+				req.Header.Set("Authorization", "Bearer "+apiKey)
+			}
+			resp, err = (&http.Client{}).Do(req)
+			if err != nil {
+				return "", nil, 0, "", err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				b2, _ := io.ReadAll(resp.Body)
+				return "", nil, 0, "", fmt.Errorf("API error %d: %s", resp.StatusCode, b2)
+			}
+		} else {
+			return "", nil, 0, "", fmt.Errorf("API error %d: %s", resp.StatusCode, errStr)
+		}
 	}
 	var content strings.Builder
 	var toolCalls []ToolCall

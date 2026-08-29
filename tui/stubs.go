@@ -62,7 +62,12 @@ type pollAgainMsg struct{}
 // providerItem implements list.Item for the provider list.
 type providerItem struct{ name, base, status string }
 
-func (i providerItem) Title() string       { return i.name }
+func (i providerItem) Title() string {
+	if i.status == "enabled" {
+		return "● " + i.name
+	}
+	return "○ " + i.name
+}
 func (i providerItem) Description() string { return fmt.Sprintf("%s [%s]", i.base, i.status) }
 func (i providerItem) FilterValue() string { return i.name }
 
